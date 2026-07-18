@@ -19,6 +19,7 @@ import com.akoev.dme.domain.repository.WorkoutLogRepository;
 import com.akoev.dme.domain.repository.WorkoutSessionRepository;
 import com.akoev.dme.fitness.engine.FitnessDecisionContext;
 import com.akoev.dme.fitness.engine.GenerationRequest;
+import com.akoev.dme.fitness.engine.RecentActivitySummaryBuilder;
 import com.akoev.dme.fitness.engine.assist.NoOpAmbiguityResolver;
 import com.akoev.dme.fitness.engine.rulebased.rules.DislikedExerciseRule;
 import com.akoev.dme.fitness.engine.rulebased.rules.EquipmentAvailabilityRule;
@@ -73,7 +74,8 @@ class RuleBasedWorkoutPlanGeneratorTest {
         when(workoutLogRepository.findRecentByUserId(anyLong(), any())).thenReturn(List.of());
 
         RuleBasedWorkoutPlanGenerator generator = new RuleBasedWorkoutPlanGenerator(
-                userRepository, exerciseRepository, workoutLogRepository, workoutSessionRepository,
+                userRepository, exerciseRepository,
+                new RecentActivitySummaryBuilder(workoutLogRepository, workoutSessionRepository),
                 goalStrategyResolver(), rules(), new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
 
         WorkoutPlan plan = generator.generate(new GenerationRequest(1L));
@@ -105,9 +107,9 @@ class RuleBasedWorkoutPlanGeneratorTest {
         when(userRepository.findById(2L)).thenReturn(java.util.Optional.of(userWithoutProfile));
 
         RuleBasedWorkoutPlanGenerator generator = new RuleBasedWorkoutPlanGenerator(
-                userRepository, mock(ExerciseRepository.class), mock(WorkoutLogRepository.class),
-                mock(WorkoutSessionRepository.class), goalStrategyResolver(), rules(),
-                new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
+                userRepository, mock(ExerciseRepository.class),
+                new RecentActivitySummaryBuilder(mock(WorkoutLogRepository.class), mock(WorkoutSessionRepository.class)),
+                goalStrategyResolver(), rules(), new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
 
         assertThatThrownBy(() -> generator.generate(new GenerationRequest(2L)))
                 .isInstanceOf(IllegalStateException.class);
@@ -119,9 +121,9 @@ class RuleBasedWorkoutPlanGeneratorTest {
         when(userRepository.findById(99L)).thenReturn(java.util.Optional.empty());
 
         RuleBasedWorkoutPlanGenerator generator = new RuleBasedWorkoutPlanGenerator(
-                userRepository, mock(ExerciseRepository.class), mock(WorkoutLogRepository.class),
-                mock(WorkoutSessionRepository.class), goalStrategyResolver(), rules(),
-                new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
+                userRepository, mock(ExerciseRepository.class),
+                new RecentActivitySummaryBuilder(mock(WorkoutLogRepository.class), mock(WorkoutSessionRepository.class)),
+                goalStrategyResolver(), rules(), new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
 
         assertThatThrownBy(() -> generator.generate(new GenerationRequest(99L)))
                 .isInstanceOf(IllegalArgumentException.class);

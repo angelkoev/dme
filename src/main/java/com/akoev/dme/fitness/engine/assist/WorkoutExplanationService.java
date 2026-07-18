@@ -1,7 +1,7 @@
 package com.akoev.dme.fitness.engine.assist;
 
+import com.akoev.dme.domain.model.UserProfile;
 import com.akoev.dme.domain.model.WorkoutPlan;
-import com.akoev.dme.fitness.engine.FitnessDecisionContext;
 
 /**
  * Produces a human-readable "why this workout" explanation. A future
@@ -10,5 +10,5 @@ import com.akoev.dme.fitness.engine.FitnessDecisionContext;
  */
 public interface WorkoutExplanationService {
 
-    String explain(WorkoutPlan plan, FitnessDecisionContext context);
+    String explain(WorkoutPlan plan, UserProfile profile);
 }

@@ -9,6 +9,7 @@
 <nav>
     <a th:href="@{/exercises}">Упражнения</a>
     <span th:if="${username}"> | <a th:href="@{/profile}">Моят профил</a></span>
+    <span th:if="${username}"> | <a th:href="@{/dashboard}">Моето табло</a></span>
 </nav>
 <div th:if="${username}">
     <p>Влязъл си като <strong th:text="${username}"></strong>.</p>

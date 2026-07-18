@@ -6,21 +6,18 @@ import com.akoev.dme.decisionengine.ScoredCandidate;
 import com.akoev.dme.domain.model.Exercise;
 import com.akoev.dme.domain.model.GenerationSource;
 import com.akoev.dme.domain.model.MovementPattern;
-import com.akoev.dme.domain.model.MuscleGroup;
 import com.akoev.dme.domain.model.SessionExercise;
 import com.akoev.dme.domain.model.TrainingGoal;
 import com.akoev.dme.domain.model.User;
 import com.akoev.dme.domain.model.UserProfile;
-import com.akoev.dme.domain.model.WorkoutLog;
 import com.akoev.dme.domain.model.WorkoutPlan;
 import com.akoev.dme.domain.model.WorkoutSession;
 import com.akoev.dme.domain.repository.ExerciseRepository;
 import com.akoev.dme.domain.repository.UserRepository;
-import com.akoev.dme.domain.repository.WorkoutLogRepository;
-import com.akoev.dme.domain.repository.WorkoutSessionRepository;
 import com.akoev.dme.fitness.engine.FitnessDecisionContext;
 import com.akoev.dme.fitness.engine.GenerationRequest;
 import com.akoev.dme.fitness.engine.RecentActivitySummary;
+import com.akoev.dme.fitness.engine.RecentActivitySummaryBuilder;
 import com.akoev.dme.fitness.engine.WorkoutPlanGenerator;
 import com.akoev.dme.fitness.engine.assist.AmbiguityResolver;
 import com.akoev.dme.fitness.engine.rulebased.scoring.FitnessExerciseScorer;
@@ -30,13 +27,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -50,13 +43,11 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class RuleBasedWorkoutPlanGenerator implements WorkoutPlanGenerator {
 
-    private static final int RECENT_ACTIVITY_WINDOW_DAYS = 14;
     private static final double TIE_SCORE_TOLERANCE = 1.0;
 
     private final UserRepository userRepository;
     private final ExerciseRepository exerciseRepository;
-    private final WorkoutLogRepository workoutLogRepository;
-    private final WorkoutSessionRepository workoutSessionRepository;
+    private final RecentActivitySummaryBuilder recentActivitySummaryBuilder;
     private final GoalStrategyResolver goalStrategyResolver;
     private final List<Rule<FitnessDecisionContext, Exercise>> rules;
     private final FitnessExerciseScorer scorer;
@@ -73,7 +64,7 @@ public class RuleBasedWorkoutPlanGenerator implements WorkoutPlanGenerator {
 
         TrainingGoal goal = request.goalOverride() != null ? request.goalOverride() : profile.getPrimaryGoal();
         GoalWorkoutStrategy strategy = goalStrategyResolver.resolve(goal);
-        RecentActivitySummary recentActivity = buildRecentActivitySummary(request.userId());
+        RecentActivitySummary recentActivity = recentActivitySummaryBuilder.build(request.userId());
         List<Exercise> catalog = exerciseRepository.findAll();
         RuleBasedDecisionEngine<FitnessDecisionContext, Exercise> engine = new RuleBasedDecisionEngine<>(rules, scorer);
 
@@ -154,42 +145,5 @@ public class RuleBasedWorkoutPlanGenerator implements WorkoutPlanGenerator {
 
     private boolean isTie(ScoredCandidate<Exercise> first, ScoredCandidate<Exercise> second) {
         return Math.abs(first.score() - second.score()) < TIE_SCORE_TOLERANCE;
-    }
-
-    private RecentActivitySummary buildRecentActivitySummary(Long userId) {
-        Instant since = Instant.now().minus(RECENT_ACTIVITY_WINDOW_DAYS, ChronoUnit.DAYS);
-        List<WorkoutLog> recentLogs = workoutLogRepository.findRecentByUserId(userId, since);
-        if (recentLogs.isEmpty()) {
-            return RecentActivitySummary.empty();
-        }
-
-        Set<Long> recentlyUsedExerciseIds = new HashSet<>();
-        Map<MuscleGroup, Integer> loadByMuscleGroup = new EnumMap<>(MuscleGroup.class);
-
-        for (WorkoutLog log : recentLogs) {
-            workoutSessionRepository.findById(log.getWorkoutSessionId()).ifPresent(session ->
-                    session.getExercises().forEach(sessionExercise -> {
-                        Exercise exercise = sessionExercise.getExercise();
-                        recentlyUsedExerciseIds.add(exercise.getId());
-                        loadByMuscleGroup.merge(exercise.getPrimaryMuscleGroup(), 1, Integer::sum);
-                    }));
-        }
-
-        WorkoutLog mostRecent = recentLogs.get(0);
-        long daysSince = ChronoUnit.DAYS.between(mostRecent.getPerformedAt(), Instant.now());
-        double averageRating = recentLogs.stream()
-                .map(WorkoutLog::getRating)
-                .filter(Objects::nonNull)
-                .mapToInt(Integer::intValue)
-                .average()
-                .orElse(0);
-
-        return RecentActivitySummary.builder()
-                .recentlyUsedExerciseIds(recentlyUsedExerciseIds)
-                .recentLoadByMuscleGroup(loadByMuscleGroup)
-                .lastCompletionPercentage(mostRecent.getCompletionPercentage())
-                .daysSinceLastWorkout((int) daysSince)
-                .averageRating(averageRating)
-                .build();
     }
 }
