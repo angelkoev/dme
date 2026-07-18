@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Моят прогрес — DME</title>
+</head>
+<body>
+<p><a th:href="@{/}">← Начало</a></p>
+<h1>Моят прогрес</h1>
+
+<div th:if="${streak}">
+    <p>Текуща поредица: <strong th:text="${streak.currentStreak}"></strong> дни
+        (най-дълга: <span th:text="${streak.longestStreak}"></span>)</p>
+</div>
+
+<h2>Лични рекорди</h2>
+<table border="1" cellpadding="6" th:if="${not #lists.isEmpty(personalRecords)}">
+    <thead>
+    <tr>
+        <th>Упражнение</th>
+        <th>Метрика</th>
+        <th>Стойност</th>
+        <th>Постигнат на</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="pr : ${personalRecords}">
+        <td th:text="${exerciseNames.get(pr.exerciseId)}"></td>
+        <td th:text="${pr.metricType}"></td>
+        <td th:text="${pr.value}"></td>
+        <td th:text="${pr.achievedAt}"></td>
+    </tr>
+    </tbody>
+</table>
+<p th:if="${#lists.isEmpty(personalRecords)}">Все още няма лични рекорди.</p>
+
+<h2>История на тренировките</h2>
+<table border="1" cellpadding="6" th:if="${not #lists.isEmpty(workoutLogs)}">
+    <thead>
+    <tr>
+        <th>Дата</th>
+        <th>Изпълнение %</th>
+        <th>Оценка</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="log : ${workoutLogs}">
+        <td th:text="${log.performedAt}"></td>
+        <td th:text="${log.completionPercentage}"></td>
+        <td th:text="${log.rating}"></td>
+    </tr>
+    </tbody>
+</table>
+<p th:if="${#lists.isEmpty(workoutLogs)}">Все още няма изпълнени тренировки.</p>
+</body>
+</html>
