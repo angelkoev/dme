@@ -5,6 +5,7 @@ import com.akoev.dme.domain.model.Location;
 import com.akoev.dme.domain.model.MuscleGroup;
 import com.akoev.dme.domain.model.Sex;
 import com.akoev.dme.domain.model.TrainingGoal;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -32,7 +33,7 @@ public record UpdateProfileRequest(
         Set<Long> dislikedExerciseIds,
         Set<MuscleGroup> preferredCategories,
         Set<MuscleGroup> unwantedCategories,
-        List<LimitationRequest> limitations,
+        @Valid List<LimitationRequest> limitations,
         Set<DayOfWeek> restDays
 ) {
 

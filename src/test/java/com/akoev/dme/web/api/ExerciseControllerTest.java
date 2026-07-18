@@ -65,4 +65,24 @@ class ExerciseControllerTest extends AbstractIntegrationTest {
                                 """))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void createIsForbiddenReturnsConsistentErrorShape() throws Exception {
+        mockMvc.perform(post("/api/v1/exercises")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Test Exercise","primaryMuscleGroup":"CHEST","movementPattern":"PUSH",
+                                 "difficultyLevel":"BEGINNER","exerciseType":"COMPOUND","equipmentIds":[]}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void getMissingExerciseReturnsConsistentErrorShape() throws Exception {
+        mockMvc.perform(get("/api/v1/exercises/999999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").exists());
+    }
 }
