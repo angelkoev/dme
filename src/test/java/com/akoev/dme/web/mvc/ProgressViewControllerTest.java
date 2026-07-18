@@ -78,7 +78,7 @@ class ProgressViewControllerTest extends AbstractIntegrationTest {
         CustomUserDetails principal = new CustomUserDetails(userRepository.findByUsername("progress.render").orElseThrow());
         mockMvc.perform(get("/progress").with(SecurityMockMvcRequestPostProcessors.user(principal)))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Текуща поредица")))
-                .andExpect(content().string(containsString("Лични рекорди")));
+                .andExpect(content().string(containsString("Current streak")))
+                .andExpect(content().string(containsString("Personal Records")));
     }
 }

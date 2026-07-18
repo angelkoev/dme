@@ -2,24 +2,24 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8"/>
-    <title>Вход — DME</title>
+    <title>Log In — DME</title>
 </head>
 <body>
-<h1>Вход</h1>
+<h1>Log In</h1>
 <form th:action="@{/login}" method="post">
     <div>
-        <label for="username">Потребителско име</label>
+        <label for="username">Username</label>
         <input id="username" type="text" name="username" required="required"/>
     </div>
     <div>
-        <label for="password">Парола</label>
+        <label for="password">Password</label>
         <input id="password" type="password" name="password" required="required"/>
     </div>
-    <button type="submit">Вход</button>
+    <button type="submit">Log In</button>
 </form>
-<p th:if="${param.error}">Грешно потребителско име или парола.</p>
-<p th:if="${param.logout}">Излязохте успешно.</p>
-<p th:if="${param.registered}">Регистрацията е успешна. Влез с новите си данни.</p>
-<p><a th:href="@{/register}">Нямаш акаунт? Регистрирай се</a></p>
+<p th:if="${param.error}">Invalid username or password.</p>
+<p th:if="${param.logout}">You have been logged out successfully.</p>
+<p th:if="${param.registered}">Registration successful. Log in with your new account.</p>
+<p><a th:href="@{/register}">Don't have an account? Register</a></p>
 </body>
 </html>

@@ -2,36 +2,36 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8"/>
-    <title>Моето табло — DME</title>
+    <title>My Dashboard — DME</title>
 </head>
 <body>
-<p><a th:href="@{/}">← Начало</a></p>
-<h1>Моето табло</h1>
+<p><a th:href="@{/}">← Home</a></p>
+<h1>My Dashboard</h1>
 
 <div th:if="${streak}">
-    <p>Текуща поредица: <strong th:text="${streak.currentStreak}"></strong> дни
-        (най-дълга: <span th:text="${streak.longestStreak}"></span>)</p>
+    <p>Current streak: <strong th:text="${streak.currentStreak}"></strong> days
+        (longest: <span th:text="${streak.longestStreak}"></span>)</p>
 </div>
 
 <div th:if="${noPlan}">
-    <p>Все още нямаш генериран план.</p>
+    <p>You don't have a generated plan yet.</p>
 </div>
 
 <form th:action="@{/dashboard/generate}" method="post">
-    <button type="submit">Генерирай нова тренировъчна програма</button>
+    <button type="submit">Generate a new workout plan</button>
 </form>
 
 <div th:if="${plan}">
-    <h2>Активен план — <span th:text="${plan.goal}"></span></h2>
+    <h2>Active Plan — <span th:text="${plan.goal}"></span></h2>
     <div th:each="workoutSession : ${plan.sessions}">
         <h3 th:text="${workoutSession.name}"></h3>
         <table border="1" cellpadding="6">
             <thead>
             <tr>
-                <th>Упражнение</th>
-                <th>Серии</th>
-                <th>Повторения</th>
-                <th>Почивка (сек)</th>
+                <th>Exercise</th>
+                <th>Sets</th>
+                <th>Reps</th>
+                <th>Rest (sec)</th>
             </tr>
             </thead>
             <tbody>
@@ -45,13 +45,13 @@
         </table>
         <form th:action="@{'/dashboard/sessions/' + ${workoutSession.id} + '/complete'}" method="post">
             <input type="hidden" name="planId" th:value="${plan.id}"/>
-            <label>Изпълнение %:
+            <label>Completion %:
                 <input type="number" name="completionPercentage" min="0" max="100" value="100"/>
             </label>
-            <label>Оценка (1-5):
+            <label>Rating (1-5):
                 <input type="number" name="rating" min="1" max="5"/>
             </label>
-            <button type="submit">Маркирай като завършена</button>
+            <button type="submit">Mark as completed</button>
         </form>
     </div>
 </div>

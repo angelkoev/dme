@@ -74,6 +74,6 @@ class DashboardControllerTest extends AbstractIntegrationTest {
         CustomUserDetails principal = new CustomUserDetails(userRepository.findByUsername("dashboard.render").orElseThrow());
         mockMvc.perform(get("/dashboard").with(SecurityMockMvcRequestPostProcessors.user(principal)))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Активен план")));
+                .andExpect(content().string(containsString("Active Plan")));
     }
 }

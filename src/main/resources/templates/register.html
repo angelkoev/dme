@@ -2,29 +2,29 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8"/>
-    <title>Регистрация — DME</title>
+    <title>Register — DME</title>
 </head>
 <body>
-<h1>Регистрация</h1>
+<h1>Register</h1>
 <form th:action="@{/register}" th:object="${registerRequest}" method="post">
     <div>
-        <label for="username">Потребителско име</label>
+        <label for="username">Username</label>
         <input id="username" type="text" name="username" required="required"/>
         <p th:if="${#fields.hasErrors('username')}" th:errors="*{username}"></p>
     </div>
     <div>
-        <label for="email">Имейл</label>
+        <label for="email">Email</label>
         <input id="email" type="email" name="email" required="required"/>
         <p th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></p>
     </div>
     <div>
-        <label for="password">Парола (поне 8 символа)</label>
+        <label for="password">Password (at least 8 characters)</label>
         <input id="password" type="password" name="password" required="required"/>
         <p th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></p>
     </div>
-    <button type="submit">Регистрация</button>
+    <button type="submit">Register</button>
 </form>
 <p th:if="${registrationError}" th:text="${registrationError}"></p>
-<p><a th:href="@{/login}">Вече имаш акаунт? Влез</a></p>
+<p><a th:href="@{/login}">Already have an account? Log in</a></p>
 </body>
 </html>

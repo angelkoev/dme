@@ -2,24 +2,24 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8"/>
-    <title>DME — Персонализирани тренировки</title>
+    <title>DME — Personalized Workouts</title>
 </head>
 <body>
 <h1>DME</h1>
 <nav>
-    <a th:href="@{/exercises}">Упражнения</a>
-    <span th:if="${username}"> | <a th:href="@{/profile}">Моят профил</a></span>
-    <span th:if="${username}"> | <a th:href="@{/dashboard}">Моето табло</a></span>
-    <span th:if="${username}"> | <a th:href="@{/progress}">Моят прогрес</a></span>
+    <a th:href="@{/exercises}">Exercises</a>
+    <span th:if="${username}"> | <a th:href="@{/profile}">My Profile</a></span>
+    <span th:if="${username}"> | <a th:href="@{/dashboard}">My Dashboard</a></span>
+    <span th:if="${username}"> | <a th:href="@{/progress}">My Progress</a></span>
 </nav>
 <div th:if="${username}">
-    <p>Влязъл си като <strong th:text="${username}"></strong>.</p>
+    <p>Logged in as <strong th:text="${username}"></strong>.</p>
     <form th:action="@{/logout}" method="post">
-        <button type="submit">Изход</button>
+        <button type="submit">Log out</button>
     </form>
 </div>
 <div th:unless="${username}">
-    <p><a th:href="@{/login}">Вход</a> | <a th:href="@{/register}">Регистрация</a></p>
+    <p><a th:href="@{/login}">Log in</a> | <a th:href="@{/register}">Register</a></p>
 </div>
 </body>
 </html>
