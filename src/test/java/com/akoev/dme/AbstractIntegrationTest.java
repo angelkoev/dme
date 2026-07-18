@@ -7,7 +7,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 @ActiveProfiles("test")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 public abstract class AbstractIntegrationTest {
 
     // Singleton container pattern: started once per JVM (not per test class) so every

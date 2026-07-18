@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>DME — Персонализирани тренировки</title>
+</head>
+<body>
+<h1>DME</h1>
+<div th:if="${username}">
+    <p>Влязъл си като <strong th:text="${username}"></strong>.</p>
+    <form th:action="@{/logout}" method="post">
+        <button type="submit">Изход</button>
+    </form>
+</div>
+<div th:unless="${username}">
+    <p><a th:href="@{/login}">Вход</a></p>
+</div>
+</body>
+</html>
