@@ -53,6 +53,10 @@
         </dependency>
 
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-mysql</artifactId>
         </dependency>
@@ -119,6 +123,17 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- On Windows + Docker Desktop, "localhost" resolves to the IPv6
+                         loopback first, but published container ports are only bound
+                         on IPv4, causing intermittent connection-refused errors against
+                         Testcontainers. Forcing IPv4 avoids that race. -->
+                    <argLine>-Djava.net.preferIPv4Stack=true</argLine>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
