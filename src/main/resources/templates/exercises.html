@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Упражнения — DME</title>
+</head>
+<body>
+<p><a th:href="@{/}">← Начало</a></p>
+<h1>Каталог с упражнения</h1>
+<table border="1" cellpadding="6">
+    <thead>
+    <tr>
+        <th>Име</th>
+        <th>Мускулна група</th>
+        <th>Движение</th>
+        <th>Ниво</th>
+        <th>Тип</th>
+        <th>Оборудване</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="exercise : ${exercises}">
+        <td th:text="${exercise.name}"></td>
+        <td th:text="${exercise.primaryMuscleGroup}"></td>
+        <td th:text="${exercise.movementPattern}"></td>
+        <td th:text="${exercise.difficultyLevel}"></td>
+        <td th:text="${exercise.exerciseType}"></td>
+        <td th:text="${#strings.listJoin(exercise.requiredEquipment.![name], ', ')}"></td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Моят профил — DME</title>
+</head>
+<body>
+<p><a th:href="@{/}">← Начало</a></p>
+<h1>Моят профил</h1>
+
+<div th:if="${noProfile}">
+    <p>Все още нямаш попълнен профил. Използвай <code>PUT /api/v1/profile/me</code>, за да го създадеш.</p>
+</div>
+
+<div th:if="${profile}">
+    <ul>
+        <li>Цел: <span th:text="${profile.primaryGoal}"></span></li>
+        <li>Ниво: <span th:text="${profile.experienceLevel}"></span></li>
+        <li>Дни в седмицата: <span th:text="${profile.daysPerWeek}"></span></li>
+        <li>Продължителност на тренировка (мин): <span th:text="${profile.sessionDurationMinutes}"></span></li>
+        <li>Локация: <span th:text="${profile.location}"></span></li>
+        <li>Наличо оборудване: <span th:text="${#strings.listJoin(profile.availableEquipment.![name], ', ')}"></span></li>
+        <li>Любими упражнения: <span th:text="${#strings.listJoin(profile.favoriteExercises.![name], ', ')}"></span></li>
+        <li>Нехаресвани упражнения: <span th:text="${#strings.listJoin(profile.dislikedExercises.![name], ', ')}"></span></li>
+        <li>Предпочитани категории: <span th:text="${profile.preferredCategories}"></span></li>
+        <li>Нежелани категории: <span th:text="${profile.unwantedCategories}"></span></li>
+        <li>Почивни дни: <span th:text="${profile.restDays}"></span></li>
+    </ul>
+    <h2>Ограничения</h2>
+    <ul>
+        <li th:each="limitation : ${profile.limitations}">
+            <span th:text="${limitation.muscleGroup}"></span> — <span th:text="${limitation.note}"></span>
+        </li>
+    </ul>
+</div>
+</body>
+</html>

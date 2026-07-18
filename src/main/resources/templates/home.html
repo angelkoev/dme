@@ -6,6 +6,10 @@
 </head>
 <body>
 <h1>DME</h1>
+<nav>
+    <a th:href="@{/exercises}">Упражнения</a>
+    <span th:if="${username}"> | <a th:href="@{/profile}">Моят профил</a></span>
+</nav>
 <div th:if="${username}">
     <p>Влязъл си като <strong th:text="${username}"></strong>.</p>
     <form th:action="@{/logout}" method="post">

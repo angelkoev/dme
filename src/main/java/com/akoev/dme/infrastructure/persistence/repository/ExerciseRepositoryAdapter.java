@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -32,6 +33,11 @@ public class ExerciseRepositoryAdapter implements ExerciseRepository {
     @Override
     public Optional<Exercise> findById(Long id) {
         return exerciseJpaRepository.findById(id).map(exerciseMapper::toDomain);
+    }
+
+    @Override
+    public List<Exercise> findAllById(Collection<Long> ids) {
+        return exerciseJpaRepository.findAllById(ids).stream().map(exerciseMapper::toDomain).toList();
     }
 
     @Override
