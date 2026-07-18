@@ -1,9 +1,13 @@
 package com.akoev.dme.infrastructure.persistence.entity;
 
 import com.akoev.dme.domain.model.ExperienceLevel;
+import com.akoev.dme.domain.model.Location;
+import com.akoev.dme.domain.model.MuscleGroup;
 import com.akoev.dme.domain.model.Sex;
 import com.akoev.dme.domain.model.TrainingGoal;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -22,6 +26,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
@@ -74,6 +79,10 @@ public class UserProfileEntity {
     @Column(length = 1000)
     private String notes;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Location location;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_equipment",
@@ -81,4 +90,38 @@ public class UserProfileEntity {
             inverseJoinColumns = @JoinColumn(name = "equipment_id")
     )
     private Set<EquipmentEntity> availableEquipment = new HashSet<>();
+
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "user_rest_days", joinColumns = @JoinColumn(name = "user_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "day_of_week")
+    private Set<DayOfWeek> restDays = new HashSet<>();
+
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "user_preferred_categories", joinColumns = @JoinColumn(name = "user_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "muscle_group")
+    private Set<MuscleGroup> preferredCategories = new HashSet<>();
+
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "user_unwanted_categories", joinColumns = @JoinColumn(name = "user_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "muscle_group")
+    private Set<MuscleGroup> unwantedCategories = new HashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_favorite_exercises",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "exercise_id")
+    )
+    private Set<ExerciseEntity> favoriteExercises = new HashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_disliked_exercises",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "exercise_id")
+    )
+    private Set<ExerciseEntity> dislikedExercises = new HashSet<>();
 }

@@ -5,6 +5,9 @@ import com.akoev.dme.infrastructure.persistence.entity.ExerciseEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+
 @Component
 @RequiredArgsConstructor
 public class ExerciseMapper {
@@ -27,5 +30,9 @@ public class ExerciseMapper {
                 .videoUrl(entity.getVideoUrl())
                 .requiredEquipment(equipmentMapper.toDomainSet(entity.getRequiredEquipment()))
                 .build();
+    }
+
+    public Set<Exercise> toDomainSet(Set<ExerciseEntity> entities) {
+        return entities.stream().map(this::toDomain).collect(Collectors.toSet());
     }
 }

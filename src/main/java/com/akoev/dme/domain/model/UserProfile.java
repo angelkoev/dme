@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -29,8 +30,19 @@ public class UserProfile {
     private int daysPerWeek;
     private int sessionDurationMinutes;
     private String notes;
+    private Location location;
     @Builder.Default
     private Set<Equipment> availableEquipment = new HashSet<>();
     @Builder.Default
     private List<UserLimitation> limitations = new ArrayList<>();
+    @Builder.Default
+    private Set<DayOfWeek> restDays = new HashSet<>();
+    @Builder.Default
+    private Set<MuscleGroup> preferredCategories = new HashSet<>();
+    @Builder.Default
+    private Set<MuscleGroup> unwantedCategories = new HashSet<>();
+    @Builder.Default
+    private Set<Exercise> favoriteExercises = new HashSet<>();
+    @Builder.Default
+    private Set<Exercise> dislikedExercises = new HashSet<>();
 }

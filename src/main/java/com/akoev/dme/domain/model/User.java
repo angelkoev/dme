@@ -25,4 +25,6 @@ public class User {
     @Builder.Default
     private Set<Role> roles = new HashSet<>();
     private UserProfile profile;
+    @Builder.Default
+    private Set<Long> favoriteWorkoutPlanIds = new HashSet<>();
 }

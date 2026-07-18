@@ -3,10 +3,13 @@ package com.akoev.dme.infrastructure.persistence.mapper;
 import com.akoev.dme.domain.model.User;
 import com.akoev.dme.infrastructure.persistence.entity.UserEntity;
 import com.akoev.dme.infrastructure.persistence.entity.UserLimitationEntity;
+import com.akoev.dme.infrastructure.persistence.entity.WorkoutPlanEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -27,6 +30,11 @@ public class UserMapper {
                 .profile(entity.getProfile() != null
                         ? userProfileMapper.toDomain(entity.getProfile(), limitationEntities)
                         : null)
+                .favoriteWorkoutPlanIds(toIds(entity.getFavoriteWorkoutPlans()))
                 .build();
+    }
+
+    private Set<Long> toIds(Set<WorkoutPlanEntity> plans) {
+        return plans.stream().map(WorkoutPlanEntity::getId).collect(Collectors.toSet());
     }
 }

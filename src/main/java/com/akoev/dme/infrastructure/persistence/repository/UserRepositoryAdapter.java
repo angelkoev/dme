@@ -1,6 +1,7 @@
 package com.akoev.dme.infrastructure.persistence.repository;
 
 import com.akoev.dme.domain.model.Equipment;
+import com.akoev.dme.domain.model.Exercise;
 import com.akoev.dme.domain.model.User;
 import com.akoev.dme.domain.model.UserLimitation;
 import com.akoev.dme.domain.model.UserProfile;
@@ -29,6 +30,8 @@ public class UserRepositoryAdapter implements UserRepository {
 
     private final UserJpaRepository userJpaRepository;
     private final EquipmentJpaRepository equipmentJpaRepository;
+    private final ExerciseJpaRepository exerciseJpaRepository;
+    private final WorkoutPlanJpaRepository workoutPlanJpaRepository;
     private final UserLimitationJpaRepository userLimitationJpaRepository;
     private final RoleJpaRepository roleJpaRepository;
     private final UserMapper userMapper;
@@ -67,6 +70,9 @@ public class UserRepositoryAdapter implements UserRepository {
         entity.setCreatedAt(user.getCreatedAt() != null ? user.getCreatedAt() : Instant.now());
         entity.setRoles(resolveRoles(user));
 
+        List<Long> favoritePlanIds = user.getFavoriteWorkoutPlanIds().stream().toList();
+        entity.setFavoriteWorkoutPlans(new HashSet<>(workoutPlanJpaRepository.findAllById(favoritePlanIds)));
+
         if (user.getProfile() != null) {
             UserProfileEntity profileEntity = entity.getProfile() != null ? entity.getProfile() : new UserProfileEntity();
             applyProfile(profileEntity, user.getProfile());
@@ -100,10 +106,20 @@ public class UserRepositoryAdapter implements UserRepository {
         profileEntity.setDaysPerWeek(profile.getDaysPerWeek());
         profileEntity.setSessionDurationMinutes(profile.getSessionDurationMinutes());
         profileEntity.setNotes(profile.getNotes());
+        profileEntity.setLocation(profile.getLocation());
+        profileEntity.setRestDays(profile.getRestDays());
+        profileEntity.setPreferredCategories(profile.getPreferredCategories());
+        profileEntity.setUnwantedCategories(profile.getUnwantedCategories());
 
         List<Long> equipmentIds = profile.getAvailableEquipment().stream().map(Equipment::getId).toList();
         Set<EquipmentEntity> equipmentEntities = new HashSet<>(equipmentJpaRepository.findAllById(equipmentIds));
         profileEntity.setAvailableEquipment(equipmentEntities);
+
+        List<Long> favoriteExerciseIds = profile.getFavoriteExercises().stream().map(Exercise::getId).toList();
+        profileEntity.setFavoriteExercises(new HashSet<>(exerciseJpaRepository.findAllById(favoriteExerciseIds)));
+
+        List<Long> dislikedExerciseIds = profile.getDislikedExercises().stream().map(Exercise::getId).toList();
+        profileEntity.setDislikedExercises(new HashSet<>(exerciseJpaRepository.findAllById(dislikedExerciseIds)));
     }
 
     private void replaceLimitations(UserEntity user, List<UserLimitation> limitations) {

@@ -7,6 +7,7 @@ import com.akoev.dme.infrastructure.persistence.entity.UserProfileEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.HashSet;
 import java.util.List;
 
 @Component
@@ -15,6 +16,7 @@ public class UserProfileMapper {
 
     private final EquipmentMapper equipmentMapper;
     private final UserLimitationMapper userLimitationMapper;
+    private final ExerciseMapper exerciseMapper;
 
     public UserProfile toDomain(UserProfileEntity entity, List<UserLimitationEntity> limitationEntities) {
         if (entity == null) {
@@ -32,8 +34,14 @@ public class UserProfileMapper {
                 .daysPerWeek(entity.getDaysPerWeek())
                 .sessionDurationMinutes(entity.getSessionDurationMinutes())
                 .notes(entity.getNotes())
+                .location(entity.getLocation())
                 .availableEquipment(equipmentMapper.toDomainSet(entity.getAvailableEquipment()))
                 .limitations(limitations)
+                .restDays(new HashSet<>(entity.getRestDays()))
+                .preferredCategories(new HashSet<>(entity.getPreferredCategories()))
+                .unwantedCategories(new HashSet<>(entity.getUnwantedCategories()))
+                .favoriteExercises(exerciseMapper.toDomainSet(entity.getFavoriteExercises()))
+                .dislikedExercises(exerciseMapper.toDomainSet(entity.getDislikedExercises()))
                 .build();
     }
 }
