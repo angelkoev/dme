@@ -235,9 +235,10 @@ for a slot, that slot is skipped rather than failing the whole generation.
 
 ## User journey
 
-1. **Register** (`POST /api/v1/auth/register`) → **log in**
-   (`POST /api/v1/auth/login` for API clients issuing a JWT, or the
-   `/login` form for the browser session).
+1. **Register** (`POST /api/v1/auth/register` for API clients, or the
+   `/register` form in the browser) → **log in** (`POST /api/v1/auth/login`
+   for API clients issuing a JWT, or the `/login` form for the browser
+   session).
 2. **Fill in the profile** (`PUT /api/v1/profile/me`, or eventually a form):
    goal, experience level, days/week, session length, location, available
    equipment, favorite/disliked exercises, preferred/unwanted categories,
@@ -268,10 +269,10 @@ docker compose up -d          # starts MySQL on localhost:3306
 ```
 
 The app seeds roles, equipment and a 28-exercise catalog via Flyway on
-first startup. Register via `POST http://localhost:8080/api/v1/auth/register`,
-then either call the REST API with the JWT from `/api/v1/auth/login`, or
-log in at `http://localhost:8080/login` for the browser/session flow
-(registration itself has no HTML form yet — only the REST endpoint).
+first startup. Register either via `POST http://localhost:8080/api/v1/auth/register`
+or at `http://localhost:8080/register` in the browser, then either call the
+REST API with the JWT from `/api/v1/auth/login`, or log in at
+`http://localhost:8080/login` for the browser/session flow.
 
 ## Testing
 
