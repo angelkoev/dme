@@ -161,9 +161,19 @@ Both chains share `CustomUserDetailsService` (backed by the domain
 exercise-catalog write endpoints.
 
 `ApiExceptionHandler` (`web.exception`, scoped to `web.api` only — the
-Thymeleaf controllers get normal HTML error handling) maps every REST error,
-including `ResponseStatusException`s raised from the application/service
-layer, to one consistent `{"message": "..."}` shape.
+Thymeleaf controllers get normal HTML error handling) maps every REST error
+to one consistent `{"message": "..."}` shape: `ResponseStatusException`s
+raised from the application/service and engine layers keep their status code,
+bean validation failures and malformed/type-mismatched request bodies map to
+400, auth/access failures to 401/403, and anything unexpected falls through
+to a generic 500. `RestAuthenticationEntryPoint` / `RestAccessDeniedHandler`
+(filter-chain-level 401/403, before a controller is even reached) emit the
+same `{"message": "..."}` shape so API clients see one consistent error body
+regardless of which layer produced the failure. There is deliberately no
+handler for `IllegalStateException`: every place that used to throw it for an
+expected, user-actionable condition (like "profile not created yet") now
+throws `ResponseStatusException` instead, reserving `IllegalStateException`
+for genuine server misconfiguration bugs that should surface as a plain 500.
 
 ## The Decision Engine
 
@@ -193,14 +203,17 @@ A weighted sum, starting from a base score of 50:
 | In the user's favorite exercises | +15 |
 | Targets a preferred category | +10 |
 | Was used in the last 14 days | −30 (avoids repeating the same workout) |
-| Muscle group trained recently, per recent session count | −5 each (avoids overtraining) |
+| Muscle group trained recently, per recent session count | −12 each (avoids overtraining) |
 | Last completion % < 60 | +10 for BEGINNER difficulty, −10 otherwise (deload) |
 | Last completion % > 90 | +10 for ADVANCED difficulty (progressive overload) |
 | — | + random jitter in [0, 5) for variety among near-ties |
 
 Every weight above is at least twice the maximum jitter, so the effect of
 each signal is deterministic and independently unit-tested
-(`FitnessExerciseScorerTest`).
+(`FitnessExerciseScorerTest`). The overtraining penalty in particular must
+clear that bar even for a single recent session (12 > 2×5), otherwise jitter
+could cancel or invert the "avoid overtraining" ordering right when it
+matters most.
 
 ### Strategy (weekly split + sets/reps/rest, `rulebased/strategy`)
 
