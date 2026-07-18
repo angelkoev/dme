@@ -24,8 +24,9 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
             throws IOException, ServletException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        // Same {"message": "..."} shape as ApiExceptionHandler.ApiError (see
+        // RestAccessDeniedHandler for the equivalent 403 case).
         objectMapper.writeValue(response.getWriter(), Map.of(
-                "error", "Unauthorized",
                 "message", "Missing or invalid authentication token"
         ));
     }

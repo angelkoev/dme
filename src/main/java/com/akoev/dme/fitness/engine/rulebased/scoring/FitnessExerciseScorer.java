@@ -25,7 +25,10 @@ public class FitnessExerciseScorer implements ScoringStrategy<FitnessDecisionCon
     private static final double FAVORITE_BONUS = 15;
     private static final double PREFERRED_CATEGORY_BONUS = 10;
     private static final double RECENCY_PENALTY = 30;
-    private static final double OVERTRAINING_PENALTY_PER_RECENT_SESSION = 5;
+    // Must stay at least twice VARIETY_JITTER_MAX even for a single recent
+    // session, otherwise jitter can cancel or invert the "avoid overtraining"
+    // ordering right when it matters most (the 1-session case).
+    private static final double OVERTRAINING_PENALTY_PER_RECENT_SESSION = 12;
     private static final double DIFFICULTY_ADJUSTMENT = 10;
     private static final double VARIETY_JITTER_MAX = 5;
 

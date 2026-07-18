@@ -49,7 +49,10 @@ public class ExerciseController {
         return ExerciseResponse.from(exerciseService.update(id, toCommand(request)));
     }
 
-    private ExerciseUpsertCommand toCommand(ExerciseRequest request) {
+    // Kept as a plain static mapping method in the web layer rather than a
+    // factory on ExerciseUpsertCommand — see ProfileController.toCommand for
+    // why (Command types must not depend on web DTOs).
+    private static ExerciseUpsertCommand toCommand(ExerciseRequest request) {
         return new ExerciseUpsertCommand(
                 request.name(),
                 request.description(),

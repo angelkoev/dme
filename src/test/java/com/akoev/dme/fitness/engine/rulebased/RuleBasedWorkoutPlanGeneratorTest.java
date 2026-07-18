@@ -35,6 +35,7 @@ import com.akoev.dme.fitness.engine.rulebased.strategy.GoalStrategyResolver;
 import com.akoev.dme.fitness.engine.rulebased.strategy.HypertrophyGoalStrategy;
 import com.akoev.dme.fitness.engine.rulebased.strategy.StrengthGoalStrategy;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -112,7 +113,8 @@ class RuleBasedWorkoutPlanGeneratorTest {
                 goalStrategyResolver(), rules(), new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
 
         assertThatThrownBy(() -> generator.generate(new GenerationRequest(2L)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(ResponseStatusException.class)
+                .hasFieldOrPropertyWithValue("statusCode", org.springframework.http.HttpStatus.NOT_FOUND);
     }
 
     @Test

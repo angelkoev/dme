@@ -1,6 +1,7 @@
 package com.akoev.dme.web.api.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -16,6 +17,10 @@ public record CompleteSessionRequest(
         @Valid List<ExercisePerformanceRequest> exercisePerformances
 ) {
 
-    public record ExercisePerformanceRequest(@NotNull Long exerciseId, BigDecimal weightKg, Integer reps) {
+    public record ExercisePerformanceRequest(
+            @NotNull Long exerciseId,
+            @DecimalMin(value = "0.0", inclusive = true) BigDecimal weightKg,
+            @Min(0) Integer reps
+    ) {
     }
 }

@@ -31,6 +31,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -97,7 +99,10 @@ public class WorkoutPlanService {
                 .build());
 
         WorkoutStreak streak = updateStreak(userId);
-        List<PersonalRecord> newRecords = detectPersonalRecords(userId, command.exercisePerformances());
+        Set<Long> exerciseIdsInSession = session.getExercises().stream()
+                .map(sessionExercise -> sessionExercise.getExercise().getId())
+                .collect(Collectors.toSet());
+        List<PersonalRecord> newRecords = detectPersonalRecords(userId, exerciseIdsInSession, command.exercisePerformances());
 
         return new SessionCompletionResult(log, streak, newRecords);
     }
@@ -124,12 +129,17 @@ public class WorkoutPlanService {
                 .build());
     }
 
-    private List<PersonalRecord> detectPersonalRecords(Long userId, List<CompleteSessionCommand.ExercisePerformanceCommand> performances) {
+    private List<PersonalRecord> detectPersonalRecords(Long userId, Set<Long> exerciseIdsInSession,
+                                                         List<CompleteSessionCommand.ExercisePerformanceCommand> performances) {
         if (performances == null || performances.isEmpty()) {
             return List.of();
         }
         List<PersonalRecord> newRecords = new ArrayList<>();
         for (CompleteSessionCommand.ExercisePerformanceCommand performance : performances) {
+            if (!exerciseIdsInSession.contains(performance.exerciseId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Exercise " + performance.exerciseId() + " is not part of this session");
+            }
             if (performance.weightKg() != null) {
                 maybeSavePersonalRecord(userId, performance.exerciseId(), MetricType.MAX_WEIGHT, performance.weightKg())
                         .ifPresent(newRecords::add);
@@ -142,7 +152,13 @@ public class WorkoutPlanService {
         return newRecords;
     }
 
-    private Optional<PersonalRecord> maybeSavePersonalRecord(Long userId, Long exerciseId, MetricType metricType, BigDecimal value) {
+    // Synchronized to close the check-then-act race between reading the
+    // current best and inserting a new one: two near-simultaneous completions
+    // for the same (user, exercise, metric) could otherwise both read the
+    // same "current best" and both insert. This only guards a single JVM
+    // instance, which matches this project's actual deployment model.
+    private synchronized Optional<PersonalRecord> maybeSavePersonalRecord(
+            Long userId, Long exerciseId, MetricType metricType, BigDecimal value) {
         Optional<PersonalRecord> best = personalRecordRepository
                 .findBestByUserIdAndExerciseIdAndMetricType(userId, exerciseId, metricType);
         if (best.isPresent() && best.get().getValue().compareTo(value) >= 0) {

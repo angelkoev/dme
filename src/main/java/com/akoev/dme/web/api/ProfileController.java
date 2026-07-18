@@ -32,7 +32,11 @@ public class ProfileController {
         return ProfileResponse.from(userProfileService.updateProfile(principal.getId(), toCommand(request)));
     }
 
-    private ProfileUpdateCommand toCommand(UpdateProfileRequest request) {
+    // Deliberately kept in the web layer (not a static factory on
+    // ProfileUpdateCommand itself) — Command types live in application.service,
+    // which must not depend on web.api.dto, so this Request->Command mapping
+    // has to live on the outer (web) side of that boundary.
+    private static ProfileUpdateCommand toCommand(UpdateProfileRequest request) {
         var limitations = request.limitations() == null ? null : request.limitations().stream()
                 .map(l -> new ProfileUpdateCommand.LimitationCommand(l.muscleGroup(), l.note()))
                 .toList();

@@ -24,7 +24,9 @@ import com.akoev.dme.fitness.engine.rulebased.scoring.FitnessExerciseScorer;
 import com.akoev.dme.fitness.engine.rulebased.strategy.GoalStrategyResolver;
 import com.akoev.dme.fitness.engine.rulebased.strategy.GoalWorkoutStrategy;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -59,7 +61,10 @@ public class RuleBasedWorkoutPlanGenerator implements WorkoutPlanGenerator {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown user id: " + request.userId()));
         UserProfile profile = user.getProfile();
         if (profile == null) {
-            throw new IllegalStateException("User has no profile yet: " + request.userId());
+            // Same expected, user-actionable condition (and status) as
+            // UserProfileService.getProfile() — not a server misconfiguration,
+            // so it must not fall into the generic 500 catch-all.
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not created yet");
         }
 
         TrainingGoal goal = request.goalOverride() != null ? request.goalOverride() : profile.getPrimaryGoal();

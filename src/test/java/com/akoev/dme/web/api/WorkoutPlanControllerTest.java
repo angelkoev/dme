@@ -125,6 +125,6 @@ class WorkoutPlanControllerTest extends AbstractIntegrationTest {
         String token = issueTokenForNewUser("no.profile.plan");
 
         mockMvc.perform(post("/api/v1/workout-plans/generate").header("Authorization", "Bearer " + token))
-                .andExpect(status().isUnprocessableEntity());
+                .andExpect(status().isNotFound());
     }
 }

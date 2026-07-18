@@ -24,8 +24,10 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
             throws IOException, ServletException {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        // Same {"message": "..."} shape as ApiExceptionHandler.ApiError, so API
+        // clients see one consistent error body regardless of whether the 403
+        // came from authorizeHttpRequests (here) or @PreAuthorize (ApiExceptionHandler).
         objectMapper.writeValue(response.getWriter(), Map.of(
-                "error", "Forbidden",
                 "message", "You do not have permission to perform this action"
         ));
     }

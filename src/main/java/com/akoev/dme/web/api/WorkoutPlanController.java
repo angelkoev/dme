@@ -57,7 +57,8 @@ public class WorkoutPlanController {
                 workoutPlanService.completeSession(principal.getId(), planId, sessionId, toCommand(request)));
     }
 
-    private CompleteSessionCommand toCommand(CompleteSessionRequest request) {
+    // Same layering rationale as ProfileController.toCommand.
+    private static CompleteSessionCommand toCommand(CompleteSessionRequest request) {
         List<CompleteSessionCommand.ExercisePerformanceCommand> performances = request.exercisePerformances() == null
                 ? List.of()
                 : request.exercisePerformances().stream()
