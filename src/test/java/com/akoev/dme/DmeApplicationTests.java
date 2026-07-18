@@ -1,10 +1,8 @@
 package com.akoev.dme;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class DmeApplicationTests {
+class DmeApplicationTests extends AbstractIntegrationTest {
 
     @Test
     void contextLoads() {

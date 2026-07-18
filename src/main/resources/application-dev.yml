@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/dme
+    username: dme
+    password: dme
+  flyway:
+    url: jdbc:mysql://localhost:3306/dme
+    user: dme
+    password: dme
