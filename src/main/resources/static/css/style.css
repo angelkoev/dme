@@ -1,0 +1,342 @@
+:root {
+    --color-bg: #f4f5f7;
+    --color-surface: #ffffff;
+    --color-text: #1f2937;
+    --color-text-muted: #6b7280;
+    --color-border: #e5e7eb;
+    --color-primary: #4f46e5;
+    --color-primary-hover: #4338ca;
+    --color-success-bg: #ecfdf5;
+    --color-success-text: #065f46;
+    --color-success-border: #34d399;
+    --color-error-bg: #fef2f2;
+    --color-error-text: #991b1b;
+    --color-error-border: #f87171;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-bg: #111827;
+        --color-surface: #1f2937;
+        --color-text: #f3f4f6;
+        --color-text-muted: #9ca3af;
+        --color-border: #374151;
+        --color-primary: #818cf8;
+        --color-primary-hover: #a5b4fc;
+        --color-success-bg: #052e1f;
+        --color-success-text: #6ee7b7;
+        --color-success-border: #10b981;
+        --color-error-bg: #3f1212;
+        --color-error-text: #fca5a5;
+        --color-error-border: #ef4444;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+    max-width: 900px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+}
+
+h1, h2, h3 {
+    line-height: 1.25;
+    color: var(--color-text);
+}
+
+h1 {
+    font-size: 1.75rem;
+    margin: 0 0 1rem;
+}
+
+h2 {
+    font-size: 1.3rem;
+    margin: 2rem 0 0.75rem;
+}
+
+h3 {
+    font-size: 1.05rem;
+    margin: 1.25rem 0 0.5rem;
+}
+
+a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+p {
+    margin: 0 0 1rem;
+}
+
+ul {
+    padding-left: 1.25rem;
+}
+
+li {
+    margin-bottom: 0.4rem;
+}
+
+/* The "<- Home" / "<- Manage Exercises" back-link at the top of most pages */
+body > p:first-child {
+    margin-bottom: 1.5rem;
+}
+
+body > p:first-child a {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+/* Home page nav bar */
+nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.9rem;
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 1.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+nav a {
+    font-weight: 500;
+}
+
+/* Forms */
+form {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+form div {
+    margin-bottom: 1.1rem;
+}
+
+/* Field-name labels always carry a "for" attribute in these templates;
+   checkbox/chip labels never do (see rules below) — this is a purely
+   markup-driven distinction, no extra classes needed. */
+label[for] {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.3rem;
+}
+
+label:not([for]) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 400;
+    font-size: 0.9rem;
+    margin: 0.15rem 0.9rem 0.15rem 0;
+    cursor: pointer;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+    width: 100%;
+    max-width: 420px;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+    color: var(--color-text);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+textarea {
+    max-width: 100%;
+    resize: vertical;
+}
+
+input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+}
+
+/* Buttons */
+button,
+input[type="submit"] {
+    display: inline-block;
+    margin-top: 0.25rem;
+    padding: 0.55rem 1.2rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+}
+
+button:hover,
+input[type="submit"]:hover {
+    background: var(--color-primary-hover);
+}
+
+/* Fieldsets act as grouped-option cards (equipment, categories, rest days...) */
+fieldset {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem 1.25rem;
+    margin: 0 0 1.25rem;
+}
+
+legend {
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0 0.4rem;
+}
+
+/* Scrollable checkbox lists (favorite/disliked exercises): stacked, not chips */
+.scroll-box {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.8rem;
+    background: var(--color-bg);
+}
+
+.scroll-box label:not([for]) {
+    display: flex;
+    margin: 0.1rem 0;
+}
+
+/* Small muted instructional text (as opposed to validation errors, which
+   are unclassed <p> elements inside a form — see the rule below) */
+.hint {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+}
+
+/* Bean-validation error messages are plain, unclassed <p> tags inside a
+   form (th:errors); the one exception (a real instructional paragraph in
+   the profile form) is given class="hint" above specifically so it doesn't
+   get swept up here. */
+form p:not([class]) {
+    color: var(--color-error-text);
+    font-size: 0.82rem;
+    margin: 0.2rem 0 0;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+
+th, td {
+    text-align: left;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.92rem;
+}
+
+th {
+    background: var(--color-bg);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+tbody tr:hover {
+    background: var(--color-bg);
+}
+
+/* Alerts (flash messages, empty-state hints) */
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    margin-bottom: 1.25rem;
+    font-size: 0.92rem;
+}
+
+.alert p {
+    margin: 0;
+}
+
+.alert-success {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+    border-color: var(--color-success-border);
+}
+
+.alert-error {
+    background: var(--color-error-bg);
+    color: var(--color-error-text);
+    border-color: var(--color-error-border);
+}
+
+.alert-info {
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border-color: var(--color-border);
+}
+
+/* Cards, e.g. one per workout session on the dashboard */
+.card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow);
+}
+
+.card form {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 1rem 0 0;
+}

@@ -2,7 +2,9 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Register — DME</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
 </head>
 <body>
 <h1>Register</h1>
@@ -24,7 +26,7 @@
     </div>
     <button type="submit">Register</button>
 </form>
-<p th:if="${registrationError}" th:text="${registrationError}"></p>
+<p th:if="${registrationError}" th:text="${registrationError}" class="alert alert-error"></p>
 <p><a th:href="@{/login}">Already have an account? Log in</a></p>
 </body>
 </html>

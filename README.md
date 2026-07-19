@@ -18,8 +18,11 @@ non-trivial domain problem.
 - [Security model](#security-model)
 - [The Decision Engine](#the-decision-engine)
 - [User journey](#user-journey)
+- [Web UI](#web-ui)
 - [Running locally](#running-locally)
+- [Test accounts](#test-accounts)
 - [Testing](#testing)
+- [Deploying to the cloud](#deploying-to-the-cloud)
 - [Roadmap](#roadmap)
 - [Future AI integration](#future-ai-integration)
 
@@ -70,7 +73,9 @@ com.akoev.dme
 │
 └── web/
     ├── api/                  # REST controllers + dto/ (records)
-    ├── mvc/                  # Thymeleaf controllers
+    ├── mvc/                  # Thymeleaf controllers + form/ (mutable form-backing
+    │                         # beans for pages that need checkbox-list/indexed-row
+    │                         # binding — ProfileForm, ExerciseForm)
     └── exception/            # ApiExceptionHandler (REST-only, consistent ApiError shape)
 ```
 
@@ -151,14 +156,17 @@ Two independent `SecurityFilterChain` beans (`infrastructure.security.SecurityCo
   + `jwt/JwtService`, HS256 via `jjwt`), CSRF disabled, JSON 401/403 via
   `RestAuthenticationEntryPoint` / `RestAccessDeniedHandler`.
 - **Everything else** (`@Order(2)`) — session-based form login for the
-  Thymeleaf pages (`/login`, `/dashboard`, `/profile`, `/progress`), CSRF
-  enabled (Spring's Thymeleaf integration injects the token into `th:action`
-  forms automatically).
+  Thymeleaf pages (`/login`, `/dashboard`, `/profile`, `/progress`, `/account/**`),
+  CSRF enabled (Spring's Thymeleaf integration injects the token into
+  `th:action` forms automatically). `/admin/**` additionally requires
+  `hasRole("ADMIN")`, and `/actuator/health` is `permitAll()` (cloud platforms
+  probe it before any credentials exist; Spring Boot's default web exposure
+  keeps every other actuator endpoint unregistered regardless).
 
 Both chains share `CustomUserDetailsService` (backed by the domain
 `UserRepository` port, not JPA directly) and a `BCryptPasswordEncoder`.
 `@EnableMethodSecurity` + `@PreAuthorize("hasRole('ADMIN')")` protects the
-exercise-catalog write endpoints.
+exercise-catalog write endpoints (both the REST ones and `web.mvc.AdminExerciseController`).
 
 `ApiExceptionHandler` (`web.exception`, scoped to `web.api` only — the
 Thymeleaf controllers get normal HTML error handling) maps every REST error
@@ -239,13 +247,16 @@ for a slot, that slot is skipped rather than failing the whole generation.
    `/register` form in the browser) → **log in** (`POST /api/v1/auth/login`
    for API clients issuing a JWT, or the `/login` form for the browser
    session).
-2. **Fill in the profile** (`PUT /api/v1/profile/me`, or eventually a form):
+2. **Fill in the profile** (`PUT /api/v1/profile/me`, or the `/profile` form):
    goal, experience level, days/week, session length, location, available
    equipment, favorite/disliked exercises, preferred/unwanted categories,
-   injuries, rest days — all in one call.
+   injuries, rest days — all in one call/submit.
 3. **Generate a plan** (`POST /api/v1/workout-plans/generate`, or the
-   "Generate" button on `/dashboard`). The response includes the plan, a
-   plain-language explanation, and a short motivational message.
+   "Generate" button on `/dashboard`, which also lets you pick a one-off goal
+   override for just that plan). The response includes the plan, a
+   plain-language explanation, and a short motivational message. Generating
+   a new plan retires whatever was previously active, so `/dashboard` and
+   `GET /api/v1/workout-plans/active` always agree on which one is current.
 4. **View the plan** — sessions with exercises, sets, rep ranges, rest
    (`GET /api/v1/workout-plans/active` or `/dashboard`).
 5. **Perform a session, then log it** (`POST
@@ -258,6 +269,26 @@ for a slot, that slot is skipped rather than failing the whole generation.
    difficulty down, a high one nudges it up.
 7. **Check progress** (`/progress`, or `GET /api/v1/me/streak` /
    `/personal-records` / `/workout-history`).
+
+## Web UI
+
+Every capability above is reachable from the browser, not just the REST API:
+
+| Page | Who | What it does |
+|---|---|---|
+| `/` | anyone | Nav + login state |
+| `/register`, `/login` | anyone | Session-based signup/login (separate from the JWT flow) |
+| `/profile` | any logged-in user | Full create/edit form for the profile: scalars, enums, and checkbox groups for equipment/categories/rest-days/exercises, plus a small set of indexed rows for injury limitations (`web.mvc.form.ProfileForm`) |
+| `/dashboard` | any logged-in user | Generate a plan (with an optional goal-override dropdown), view the active plan, mark a session complete |
+| `/progress` | any logged-in user | Streak, personal records, workout history |
+| `/help` | anyone | Plain-language explanation of how the app works, for end users |
+| `/exercises` | anyone | Read-only catalog browse |
+| `/account/password` | any logged-in user | Change password (verifies the current one first) |
+| `/admin/exercises`, `/admin/exercises/new`, `/admin/exercises/{id}/edit` | `ROLE_ADMIN` | Create/edit the exercise catalog (`web.mvc.form.ExerciseForm`) |
+
+Every one of these pages is backed by the exact same application-service
+methods the REST controllers call — there's no separate "web" business logic
+to keep in sync.
 
 ## Running locally
 
@@ -272,7 +303,32 @@ The app seeds roles, equipment and a 28-exercise catalog via Flyway on
 first startup. Register either via `POST http://localhost:8080/api/v1/auth/register`
 or at `http://localhost:8080/register` in the browser, then either call the
 REST API with the JWT from `/api/v1/auth/login`, or log in at
-`http://localhost:8080/login` for the browser/session flow.
+`http://localhost:8080/login` for the browser/session flow. Or skip
+registration entirely and use one of the [test accounts](#test-accounts).
+
+`docker-compose.yml` only starts MySQL — the app itself runs directly via
+`./mvnw spring-boot:run` for local dev. See
+[Deploying to the cloud](#deploying-to-the-cloud) for running the app itself
+in a container.
+
+## Test accounts
+
+The `dev` profile seeds two ready-to-use accounts (Flyway migration
+`src/main/resources/db/dev-migration/V13__seed_test_users.sql`), both with
+password **`Test1234!`**:
+
+| Username | Role(s) | State |
+|---|---|---|
+| `testuser` | `ROLE_USER` | Profile already filled in (HYPERTROPHY, INTERMEDIATE, 4 days/week, some equipment) plus a 3-day streak — generate a plan immediately with no setup |
+| `testadmin` | `ROLE_USER`, `ROLE_ADMIN` | No profile yet, so you can also see that "no profile" state — use it to reach `/admin/exercises` |
+
+This migration lives **outside** `src/main/resources/db/migration` on
+purpose: only `application-dev.yml` adds `classpath:db/dev-migration` to
+`spring.flyway.locations`, so it never runs against any deployment that
+doesn't explicitly opt into the dev profile the same way. **If you fork this
+project for anything with real users, delete `db/dev-migration` entirely** —
+don't rely on a profile flag alone to keep known credentials out of a real
+database.
 
 ## Testing
 
@@ -299,6 +355,32 @@ REST API with the JWT from `/api/v1/auth/login`, or log in at
 ./mvnw test
 ```
 
+## Deploying to the cloud
+
+The app has no cloud-specific code — only configuration + a container image:
+
+- **`Dockerfile`** (repo root) — multi-stage build: `eclipse-temurin:25-jdk`
+  compiles the jar, `eclipse-temurin:25-jre` runs it. `docker build -t dme .`
+  then `docker run -p 8080:8080 --env-file .env dme` (with the env vars
+  below in `.env`).
+- **`application-prod.yml`** — activate with `SPRING_PROFILES_ACTIVE=prod`.
+  Requires these env vars, with **no defaults**, so a missing one fails
+  fast at startup instead of silently misconfiguring:
+  - `SPRING_DATASOURCE_URL` (a real `jdbc:mysql://...` URL — you still need a
+    reachable MySQL instance; this project doesn't provision one)
+  - `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`
+  - `JWT_SECRET` — a long random value (this one *does* have a dev-only
+    fallback in `application.yml`, but override it for anything real)
+  - `PORT` (optional) — most PaaS hosts inject this to dictate the bind port
+- **`GET /actuator/health`** — unauthenticated (see [Security
+  model](#security-model)), returns `{"status":"UP"}` once the datasource is
+  reachable. Point your host's health check here.
+
+None of this seeds the database — Flyway still runs `V1`–`V12` against
+whatever schema `SPRING_DATASOURCE_URL` points at on first boot, same as
+local dev, just without the `db/dev-migration` test accounts (see [Test
+accounts](#test-accounts)).
+
 ## Roadmap
 
 | Version | Scope |
@@ -312,6 +394,7 @@ REST API with the JWT from `/api/v1/auth/login`, or log in at
 | v0.7 | Basic gamification surfacing: streaks, personal records, progress view (M6) |
 | **v0.8+** | *Not built yet, described only:* full gamification (achievements/badges catalog, levels, weekly/monthly goals dashboard, charts), a real AI-backed implementation of the `AmbiguityResolver`/`WorkoutExplanationService`/`MotivationalMessageService` ports, and — as a demonstration that `decisionengine` is genuinely reusable — a second decision domain (e.g. nutrition) built on the same core. |
 | v1.0 | Polish: this README, expanded exception handling and validation, final test pass (M7) |
+| v1.1 | Web parity with the API: `/profile` create/edit form, dashboard goal-override, `/admin/exercises` catalog editor, `/account/password`. Fixed a bug where regenerating a plan never deactivated the previous one. Added cloud-hosting basics: `Dockerfile`, `application-prod.yml`, `/actuator/health`, and dev-only seeded test accounts. |
 
 ## Future AI integration
 

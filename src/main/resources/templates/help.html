@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Help — DME</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body>
+<p><a th:href="@{/}">← Home</a></p>
+<h1>How DME Works</h1>
+
+<p>DME builds you a personalized workout plan based on your goal, experience
+level, available equipment, and any injuries — then adjusts future plans
+based on how your workouts actually go. Here's how to get the most out of
+it.</p>
+
+<h2>1. Create an account</h2>
+<p>Use <a th:href="@{/register}">Register</a> to create an account, then
+<a th:href="@{/login}">log in</a>. (If you're just trying things out, ask
+whoever gave you access about a test account.)</p>
+
+<h2>2. Fill in your profile</h2>
+<p>Go to <a th:href="@{/profile}">My Profile</a> and tell DME about yourself:</p>
+<ul>
+    <li><strong>Goal</strong> — what you're training for: Strength,
+        Hypertrophy (muscle size), Fat Loss, Endurance, or General Fitness.
+        This decides the shape of your plan — how many sets/reps, how much
+        rest, and whether sessions focus on one muscle group or the whole
+        body.</li>
+    <li><strong>Experience level</strong> — Beginner, Intermediate, or
+        Advanced. DME won't hand a beginner an advanced-only exercise.</li>
+    <li><strong>Days per week &amp; session length</strong> — how often and
+        how long you can train.</li>
+    <li><strong>Where you train</strong> and <strong>available equipment</strong>
+        — DME only picks exercises you can actually do with what you have.</li>
+    <li><strong>Favorite / disliked exercises</strong> — favorites get a
+        small boost when DME is choosing between similar options; disliked
+        ones are never picked at all.</li>
+    <li><strong>Preferred / unwanted muscle groups</strong> — categories you'd
+        like more of, or want avoided entirely.</li>
+    <li><strong>Injuries</strong> — flag a muscle group as injured (with a
+        short note) and DME will never suggest an exercise that targets it.</li>
+    <li><strong>Rest days</strong> — days you don't want to train.</li>
+</ul>
+<p>You can come back and change any of this later — the next plan you
+generate will use your latest answers.</p>
+
+<h2>3. Generate a plan</h2>
+<p>On <a th:href="@{/dashboard}">My Dashboard</a>, click
+"Generate a new workout plan." You can optionally pick a different goal just
+for that one plan, without changing your saved profile goal. Your plan is
+made up of sessions (e.g. "Push Day 1"), each with a handful of exercises and
+their sets, rep range, and rest time.</p>
+<p>Generating a new plan replaces your current one — you'll always have
+exactly one active plan.</p>
+
+<h2>4. Follow the plan and log your sessions</h2>
+<p>After you finish a session, mark it complete on the dashboard: enter how
+much of it you actually completed (%) and, optionally, a rating. This
+matters more than it might seem:</p>
+<ul>
+    <li>Exercises you've done recently show up less often, so your plan
+        doesn't get repetitive.</li>
+    <li>Muscle groups you've trained a lot recently get a break, to avoid
+        overtraining.</li>
+    <li>If you're consistently finishing less than 60% of a session, your
+        next plan eases off; finishing over 90% nudges it to get harder.</li>
+</ul>
+<p>In short: the more honestly you log, the better your next plan fits you.</p>
+
+<h2>5. Track your progress</h2>
+<p><a th:href="@{/progress}">My Progress</a> shows your current and longest
+workout streak, any personal records you've set (heaviest weight or most
+reps on an exercise), and your full workout history.</p>
+
+<h2>6. Account settings</h2>
+<p>You can change your password any time from
+<a th:href="@{/account/password}">Change Password</a>.</p>
+
+<h2>Browsing without an account</h2>
+<p>Anyone can browse the full <a th:href="@{/exercises}">exercise catalog</a>
+without logging in.</p>
+</body>
+</html>

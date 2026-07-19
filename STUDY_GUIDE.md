@@ -29,9 +29,12 @@ exists to support exercising that engine end-to-end.
   touching the engine, controllers, or services (see §7).
 - **Tech stack**: Java 25, Spring Boot 4.1.0 (spring-boot-starter-parent),
   Spring Data JPA / Hibernate, Spring Security 6 (JWT + form login), Spring
-  MVC + Thymeleaf, MySQL 8.4, Flyway (versioned migrations V1–V12), Lombok,
-  jjwt 0.12.6 for JWT, JUnit 5 + Mockito + Testcontainers for tests.
-  See `pom.xml`.
+  MVC + Thymeleaf, Spring Boot Actuator (health endpoint only), MySQL 8.4,
+  Flyway (versioned migrations V1–V13, plus a dev-only seed migration —
+  see §3), Lombok, jjwt 0.12.6 for JWT, JUnit 5 + Mockito + Testcontainers
+  for tests. See `pom.xml`.
+- **Every capability exists both as a REST endpoint and as a browser page**
+  backed by the same application-service method — see §13.
 
 ---
 
@@ -86,8 +89,8 @@ only on `domain.repository` interfaces (Dependency Inversion).
 | `infrastructure.persistence.mapper` | Entity <-> domain object conversion. |
 | `infrastructure.persistence.repository` | Spring Data JPA repos (`XxxJpaRepository`) + `XxxRepositoryAdapter` implementing the domain port. |
 | `infrastructure.security` | `SecurityConfig`, `CustomUserDetails`(`Service`), `RestAuthenticationEntryPoint`/`RestAccessDeniedHandler`, and `jwt/` (`JwtAuthFilter`, `JwtService`, `JwtProperties`). |
-| `web.api` | REST controllers (`AuthController`, `ProfileController`, `ExerciseController`, `WorkoutPlanController`, `ProgressController`, `CurrentUserController`) + `dto/` (request/response records). |
-| `web.mvc` | Thymeleaf controllers (`HomeController`, `LoginController`, `RegisterController`, `DashboardController`, `ProfileViewController`, `ProgressViewController`, `ExerciseViewController`). |
+| `web.api` | REST controllers (`AuthController`, `AccountController`, `ProfileController`, `ExerciseController`, `WorkoutPlanController`, `ProgressController`, `CurrentUserController`) + `dto/` (request/response records). |
+| `web.mvc` | Thymeleaf controllers (`HomeController`, `HelpController`, `LoginController`, `RegisterController`, `DashboardController`, `ProfileViewController`, `AccountViewController`, `AdminExerciseController`, `ProgressViewController`, `ExerciseViewController`) + `form/` (`ProfileForm`, `ExerciseForm` — mutable form-backing beans, see §13). |
 | `web.exception` | `ApiExceptionHandler` (REST-only `@RestControllerAdvice`), `ApiError`. |
 
 ### Design patterns actually in the code (not just claimed)
@@ -106,10 +109,11 @@ only on `domain.repository` interfaces (Dependency Inversion).
 
 ## 3. Database schema
 
-MySQL 8.4, fully versioned by Flyway migrations `V1`–`V12` in
-`src/main/resources/db/migration/`. Nothing is created by Hibernate
-(`ddl-auto: validate` in `application.yml` — Hibernate checks the schema
-matches the entities but never generates DDL).
+MySQL 8.4, fully versioned by Flyway migrations `V1`–`V13` in
+`src/main/resources/db/migration/` (plus a dev-only `V13` seed migration in
+a *separate* folder, `src/main/resources/db/dev-migration/` — see below).
+Nothing is created by Hibernate (`ddl-auto: validate` in `application.yml` —
+Hibernate checks the schema matches the entities but never generates DDL).
 
 | Migration | What it adds |
 |---|---|
@@ -125,6 +129,7 @@ matches the entities but never generates DDL).
 | V10 | `workout_logs` (a completed session) + index on `(user_id, performed_at)` |
 | V11 | `personal_records`, `workout_streaks`, `user_favorite_workout_plans` |
 | V12 | Seeds 28 exercises spanning every muscle group / movement pattern / difficulty / equipment combination, plus their `exercise_equipment` rows |
+| V13 *(dev-only, `db/dev-migration/`)* | Seeds `testuser`/`testadmin` test accounts — see §14 |
 
 Key modeling decisions worth remembering:
 
@@ -177,6 +182,17 @@ Two independent `SecurityFilterChain` beans in `infrastructure/security/Security
 ### Everything else chain (`@Order(2)`) — session + form login
 - `/`, `/login`, `/register`, `/exercises`, `/exercises/**`, `/css/**`,
   `/js/**` are public; everything else needs an authenticated session.
+- `/admin/**` additionally requires `hasRole("ADMIN")` — this is what gates
+  `AdminExerciseController` (§13). `@PreAuthorize("hasRole('ADMIN')")` at the
+  class level on that controller is defense in depth on top of this
+  filter-chain rule, same as `ExerciseController`'s REST admin endpoints.
+- `/actuator/health` and `/actuator/health/**` are `permitAll()` —
+  deliberately, since a cloud host's health check runs before any
+  credentials exist. Spring Boot's default `management.endpoints.web.exposure.include`
+  is just `health`, so every other actuator endpoint (`/actuator/env`,
+  `/actuator/beans`, ...) is unregistered (404) regardless of auth — verified
+  by hand: authenticated requests to those paths still 404, only
+  `/actuator` (the HAL discovery page) and `/actuator/health` resolve.
 - Standard `formLogin()` targeting `/login`, redirecting to `/` on success;
   standard `logout()`.
 - CSRF is **enabled** here (unlike the API chain) — Thymeleaf's Spring
@@ -370,10 +386,23 @@ strategy (a misconfiguration bug, not a user error → falls to 500, §4).
    `SetRepScheme` values) into a `WorkoutPlan` with
    `generationSource = RULE_BASED`, `active = true`, `generatedAt = now`.
 
-`WorkoutPlanService.generate()` (application layer) then **persists** that
-plan, loads the (now-saved) user again, and calls
-`WorkoutExplanationService.explain()` + `MotivationalMessageService.motivate()`
-to build the human-readable response (`GenerationResult`).
+`WorkoutPlanService.generate()` (application layer) then, **before** saving
+the newly generated plan, calls `workoutPlanRepository.deactivateAllForUser(userId)`
+— a bulk `UPDATE workout_plans SET active = false WHERE user_id = ? AND active = true`
+(`WorkoutPlanJpaRepository.deactivateAllForUser`). This was a real bug fixed
+after the fact: every `generate()` call inserts a plan with `active = true`,
+and without this step, repeated generation left *multiple* plans marked
+active — `findActiveByUserId` (`findFirstByUser_IdAndActiveTrueOrderByGeneratedAtDesc`,
+now ordered defensively) had no way to know which one was "current." The fix
+is a bulk flag flip rather than loading + re-saving the old plan entity,
+specifically because `WorkoutPlanEntity.sessions` is `CascadeType.ALL` +
+`orphanRemoval = true` — re-saving an entity just to flip one boolean risks
+Hibernate rewriting its child `workout_sessions`/`session_exercises`, which
+would cascade-delete any `workout_logs` pointing at the old session ids.
+After deactivating, it persists the new plan, loads the (now-saved) user
+again, and calls `WorkoutExplanationService.explain()` +
+`MotivationalMessageService.motivate()` to build the human-readable response
+(`GenerationResult`).
 
 ---
 
@@ -399,22 +428,62 @@ cookie instead of a bearer token.
 ### Fill in profile
 ```
 PUT /api/v1/profile/me  (ProfileController → UserProfileService.updateProfile)
+GET/POST /profile       (ProfileViewController → same UserProfileService.updateProfile)
 ```
-One call replaces the whole `UserProfile` (goal, experience, days/week,
-session length, location, equipment ids, favorite/disliked exercise ids,
-preferred/unwanted categories, injuries, rest days). Note
-`UpdateProfileRequest` (web DTO) → `ProfileUpdateCommand` (application-layer
-record) mapping happens **in the controller**, not via a static factory on
-the Command — deliberately, so `application.service` never depends on
-`web.api.dto` (see the comment in `ProfileController.toCommand`).
+Either way, one call/submit replaces the whole `UserProfile` (goal,
+experience, days/week, session length, location, equipment ids,
+favorite/disliked exercise ids, preferred/unwanted categories, injuries,
+rest days). `UpdateProfileRequest` (web DTO) → `ProfileUpdateCommand`
+(application-layer record) mapping happens **in the controller**, not via a
+static factory on the Command — deliberately, so `application.service` never
+depends on `web.api.dto` (see the comment in `ProfileController.toCommand`).
+`ProfileViewController` does the same mapping from its own `ProfileForm`
+(§13) — same rationale, same pattern, different source type.
 
 ### Generate a plan
 ```
 POST /api/v1/workout-plans/generate  (optional {goalOverride})
+POST /dashboard/generate              (optional goalOverride form field)
 ```
 → `WorkoutPlanService.generate()` → `RuleBasedWorkoutPlanGenerator.generate()`
-(§5.7) → saved via `WorkoutPlanRepository` → response includes the plan +
-`explanation` + `motivation` text (`GenerateWorkoutPlanResponse`).
+(§5.7, which now also deactivates the previous plan first) → saved via
+`WorkoutPlanRepository` → response includes the plan + `explanation` +
+`motivation` text (`GenerateWorkoutPlanResponse`). The dashboard's
+`goalOverride` is bound as a raw `String`, not `TrainingGoal`, in
+`DashboardController.generate()` — `@RequestParam`'s `ConversionService` has
+no "empty string means null" special case (unlike bean-property binding via
+`WebDataBinder`, which does), so an unset `<select>` submitting `""` would
+otherwise fail enum conversion instead of meaning "use my profile's goal."
+The controller parses it manually: blank/null → `null`, otherwise
+`TrainingGoal.valueOf(...)`.
+
+### Change password
+```
+PUT /api/v1/account/password  {currentPassword, newPassword}   (AccountController)
+GET/POST /account/password                                       (AccountViewController)
+```
+Both call `AuthService.changePassword(userId, currentPassword, newPassword)`:
+verifies `currentPassword` against the stored hash via
+`PasswordEncoder.matches` (→ 400 `ResponseStatusException` if wrong, same
+error-shape story as everywhere else, §4), then re-encodes and saves. Reuses
+the same full-`User`-object `save()` path as `UserProfileService`/`AuthService.register`
+— safe because `UserRepositoryAdapter.save()` only touches what a loaded
+`User` actually carries (roles, profile) and here that's the same object
+`findById` returned, so nothing else is disturbed.
+
+### Manage the exercise catalog (web)
+```
+GET  /admin/exercises              list
+GET  /admin/exercises/new          blank create form
+POST /admin/exercises/new          create
+GET  /admin/exercises/{id}/edit    prefilled edit form
+POST /admin/exercises/{id}/edit    update
+```
+`AdminExerciseController` (ROLE_ADMIN only, §4) calls the exact same
+`ExerciseService.create()`/`update()`/`getById()`/`listAll()` the REST
+`ExerciseController` calls — the catalog-write rules live in exactly one
+place regardless of which surface reaches them. `ExerciseForm` (§13) handles
+the equipment checkbox list.
 
 ### View the plan
 `GET /api/v1/workout-plans/active` (the one currently `active=true`),
@@ -536,13 +605,14 @@ Flyway seeds roles/equipment/28-exercise catalog on first startup
 automatically. Register at `POST /api/v1/auth/register` or
 `http://localhost:8080/register`; then either call the API with the JWT from
 `/api/v1/auth/login`, or log in at `http://localhost:8080/login` for the
-browser/session flow.
+browser/session flow. Or skip registration and use one of the seeded
+[test accounts](#14-test-accounts-dev-only) (§14).
 
-`application.yml` (prod-ish defaults) + `application-dev.yml` (local
-overrides: datasource/flyway pointed at the docker-compose MySQL) is the
-whole Spring profile setup — there's no `application-prod.yml` yet.
-`app.jwt.secret` **must** be overridden via the `JWT_SECRET` env var outside
-of local dev.
+`application.yml` (base defaults) + `application-dev.yml` (local overrides:
+datasource/flyway pointed at the docker-compose MySQL, plus the extra
+`db/dev-migration` Flyway location) + `application-prod.yml` (cloud
+overrides, §15) is the whole Spring profile setup. `app.jwt.secret` **must**
+be overridden via the `JWT_SECRET` env var outside of local dev.
 
 ---
 
@@ -617,6 +687,127 @@ small — worth knowing before you extend anything:
 | GET | `/api/v1/me/streak` | JWT | Current/longest streak |
 | GET | `/api/v1/me/personal-records` | JWT | All PRs |
 | GET | `/api/v1/me/workout-history` | JWT | All workout logs |
+| PUT | `/api/v1/account/password` | JWT | Change password |
 
 Browser/Thymeleaf routes: `/`, `/login`, `/register`, `/dashboard`,
-`/profile`, `/progress`, `/exercises`.
+`/profile`, `/progress`, `/exercises`, `/account/password`, `/admin/exercises`
+(+ `/new`, `/{id}/edit`) — full reference in §13.
+
+---
+
+## 13. Web UI page reference
+
+Every page below is backed by the *same* application-service call the
+equivalent REST endpoint uses (§12) — there is no separate "web" business
+logic anywhere to drift out of sync with the API.
+
+| Route(s) | Controller | Template | Backing form | Auth |
+|---|---|---|---|---|
+| `/` | `HomeController` | `home.html` | — | public |
+| `/register` | `RegisterController` | `register.html` | `RegisterRequest` (shared with the API DTO) | public |
+| `/login` | `LoginController` (mostly Spring's `formLogin()`) | `login.html` | — | public |
+| `/help` | `HelpController` | `help.html` | — | public |
+| `/exercises` | `ExerciseViewController` | `exercises.html` | — | public |
+| `/profile` (GET+POST) | `ProfileViewController` | `profile.html` | `ProfileForm` | session |
+| `/dashboard` (GET), `/dashboard/generate` (POST), `/dashboard/sessions/{id}/complete` (POST) | `DashboardController` | `dashboard.html` | plain `@RequestParam`s | session |
+| `/progress` | `ProgressViewController` | `progress.html` | — | session |
+| `/account/password` (GET+POST) | `AccountViewController` | `account-password.html` | `ChangePasswordRequest` (shared with the API DTO) | session |
+| `/admin/exercises`, `/admin/exercises/new`, `/admin/exercises/{id}/edit` | `AdminExerciseController` | `admin-exercises.html`, `admin-exercise-form.html` | `ExerciseForm` | session + `ROLE_ADMIN` |
+
+### Why some pages need a dedicated form-backing bean and some don't
+
+`RegisterRequest`/`ChangePasswordRequest` are plain immutable records with
+only flat `String`/primitive fields — Spring 6.1+'s constructor-based data
+class binding handles them directly in an `@ModelAttribute`, the same way
+`RegisterController` has always used `RegisterRequest` as-is (proving this
+was already an established pattern before this round of work, not something
+new invented for it).
+
+`ProfileForm` and `ExerciseForm` (`web.mvc.form`) exist because `/profile`
+and the admin exercise form need two things records can't give a Thymeleaf
+template for free:
+1. **Checkbox-list binding** (`List<Long> equipmentIds`, `List<MuscleGroup>
+   preferredCategories`, etc.) — Thymeleaf's `th:field` manages the
+   "unchecked box submits nothing" problem automatically (injecting a hidden
+   `_fieldName` marker) but only against a plain JavaBean property with a
+   getter *and* setter; a record's accessor-only shape doesn't fit that.
+2. **Indexed nested rows** (`ProfileForm.limitations`, a fixed-size padded
+   list of `LimitationRow`) — bound via
+   `th:field="*{limitations[__${iter.index}__].note}"`, which needs the same
+   mutable-bean shape one level down.
+
+Both controllers convert their form back to the application-layer Command
+type themselves (`toCommand(...)`, private method) rather than the Command
+type knowing how to build itself from a form — same layering rule as
+`ProfileController.toCommand` in `web.api`: Command types live in
+`application.service` and must never depend on anything in `web.*`.
+
+### A bug the manual verification of this UI actually caught
+
+While building `/profile`, a `th:each="eq : ${allEquipment}"` loop threw
+`IllegalArgumentException: Iteration variable cannot be null` — not because
+`allEquipment` was null, but because `eq` collides with a reserved
+comparison keyword in Thymeleaf's expression language (`eq`/`ne`/`gt`/`lt`/...
+are textual operators, same family as the `session`-as-a-`th:each`-variable
+gotcha already called out in the README's Testing section). Renamed the loop
+variable to `equipment` and it rendered fine. Worth remembering before
+naming any future `th:each` variable in this codebase.
+
+---
+
+## 14. Test accounts (dev-only)
+
+`src/main/resources/db/dev-migration/V13__seed_test_users.sql` seeds two
+accounts, both with password **`Test1234!`**:
+
+| Username | Roles | Notes |
+|---|---|---|
+| `testuser` | `ROLE_USER` | Profile pre-filled (HYPERTROPHY, INTERMEDIATE, 4 days/week, GYM, some equipment, one preferred category) plus a `workout_streaks` row (3-day current streak) — can generate a plan immediately with zero setup |
+| `testadmin` | `ROLE_USER`, `ROLE_ADMIN` | Deliberately left without a profile, so the "no profile yet" state (`/profile`'s `hasProfile == false` branch, §13) is still reachable to click through — use this account to reach `/admin/exercises` |
+
+**Why this migration lives outside `db/migration`.** Flyway's migration
+`locations` is itself just a Spring property
+(`spring.flyway.locations`), and only `application-dev.yml` sets it to
+`classpath:db/migration,classpath:db/dev-migration`; the base
+`application.yml` (and therefore `application-prod.yml`, which doesn't
+override it) implicitly keeps Spring Boot's default of just
+`classpath:db/migration`. So this migration only ever runs when the `dev`
+profile is active — never against a deployment that doesn't explicitly opt
+in the same way. Versioned as `V13` (continuing the main sequence, not
+restarting at `V1`) specifically because Flyway merges every configured
+location into **one** chronological version history — two files both
+claiming `V1` from different locations would be a hard error
+("Found more than one migration with version 1").
+
+If you ever reuse this project as a base for something with real users,
+**delete `db/dev-migration` entirely** rather than trusting the profile
+flag alone to keep known credentials off a real database.
+
+---
+
+## 15. Cloud deployment
+
+Three additions, no application code changes:
+
+- **`Dockerfile`** (repo root) — multi-stage: `eclipse-temurin:25-jdk` runs
+  `./mvnw package` (a `chmod +x mvnw` first, since the executable bit
+  doesn't reliably survive a Windows checkout → Docker COPY), then
+  `eclipse-temurin:25-jre` runs the resulting jar. `.dockerignore` keeps
+  `target/`, `.git/`, `.idea/` out of the build context.
+- **`application-prod.yml`** — activated via `SPRING_PROFILES_ACTIVE=prod`.
+  Sets `server.port: ${PORT:8080}` (most PaaS hosts inject `PORT` to dictate
+  the bind port) and `spring.datasource.*`/`spring.flyway.*` from
+  `SPRING_DATASOURCE_URL`/`SPRING_DATASOURCE_USERNAME`/`SPRING_DATASOURCE_PASSWORD`
+  — **with no defaults**, unlike `app.jwt.secret`'s dev fallback in the base
+  `application.yml`. That's deliberate: a missing datasource env var should
+  fail the app at startup with a clear Spring Boot error, not silently do
+  nothing or connect to `localhost`.
+- **`spring-boot-starter-actuator`** (new `pom.xml` dependency) exposing
+  `GET /actuator/health`, made `permitAll()` in `SecurityConfig` (§4) so a
+  cloud health check doesn't need credentials. Point your host's health
+  check/readiness probe at this path.
+
+What this does **not** do: provision a database, pick a specific cloud
+provider, or seed any data beyond the normal `V1`–`V12` migrations (the
+`db/dev-migration` test accounts, §14, are dev-profile-only and won't exist
+in a `prod`-profile deployment).

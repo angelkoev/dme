@@ -2,7 +2,9 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Exercise — DME Admin</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
 </head>
 <body>
 <p><a th:href="@{/admin/exercises}">← Manage Exercises</a></p>
@@ -67,7 +69,7 @@
 
     <fieldset>
         <legend>Required equipment</legend>
-        <label th:each="equipment : ${allEquipment}" style="margin-right: 1em;">
+        <label th:each="equipment : ${allEquipment}">
             <input type="checkbox" th:field="*{equipmentIds}" th:value="${equipment.id}"/>
             <span th:text="${equipment.name}"></span>
         </label>

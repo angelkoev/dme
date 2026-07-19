@@ -1,0 +1,26 @@
+# Cloud-hosting profile. Activate with SPRING_PROFILES_ACTIVE=prod.
+#
+# Required environment variables (no defaults on purpose — a missing one
+# should fail fast at startup, not silently fall back to a dev value):
+#   SPRING_DATASOURCE_URL       e.g. jdbc:mysql://<host>:3306/<db>
+#   SPRING_DATASOURCE_USERNAME
+#   SPRING_DATASOURCE_PASSWORD
+#   JWT_SECRET                  a long random value (already read with a dev
+#                                fallback by application.yml regardless of
+#                                profile — override it here too)
+#
+# Optional:
+#   PORT                        the port to bind (most PaaS hosts inject this)
+
+server:
+  port: ${PORT:8080}
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  flyway:
+    url: ${SPRING_DATASOURCE_URL}
+    user: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}

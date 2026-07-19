@@ -66,7 +66,12 @@ public class SecurityConfig {
     public SecurityFilterChain webSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/login", "/register", "/exercises", "/exercises/**", "/css/**", "/js/**").permitAll()
+                        .requestMatchers("/", "/help", "/login", "/register", "/exercises", "/exercises/**", "/css/**", "/js/**").permitAll()
+                        // Unauthenticated on purpose: cloud platforms (container orchestrators,
+                        // PaaS health checks) probe this before any credentials exist. Only
+                        // "health" is exposed over web (management.endpoints.web.exposure.include
+                        // is left at Spring Boot's default), so no other actuator data is reachable.
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .formLogin(form -> form

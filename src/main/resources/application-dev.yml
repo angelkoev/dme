@@ -7,3 +7,7 @@ spring:
     url: jdbc:mysql://localhost:3306/dme
     user: dme
     password: dme
+    # Dev-only seed data (test accounts) lives in a separate location so it
+    # never runs as part of the default classpath:db/migration path used by
+    # any other profile/deployment.
+    locations: classpath:db/migration,classpath:db/dev-migration
