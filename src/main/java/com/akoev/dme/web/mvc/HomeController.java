@@ -18,7 +18,9 @@ public class HomeController {
             new DecisionDomainCard("Meal Planner",
                     "Meal plans based on dietary goals, allergies, and disliked ingredients."),
             new DecisionDomainCard("Movie & Show Picks",
-                    "Recommendations based on genre preferences and what you've already watched.")
+                    "Recommendations based on genre preferences and what you've already watched."),
+            new DecisionDomainCard("Learning Path",
+                    "Course/skill recommendations based on a career goal, current level, and prerequisites.")
     );
 
     @GetMapping("/")

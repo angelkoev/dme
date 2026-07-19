@@ -1,15 +1,23 @@
-# DME — Decision Engine for Personalized Workouts
+# DME — Decision Making Engine
 
-A Spring Boot learning project: a rule-based **Decision Engine** that generates
-personalized workout plans, built so the "brain" of the system (rule
-filtering + scoring + strategy selection) can be reused for other decision
-domains later, and so a rule-based generator can be swapped or augmented
-with an AI-backed one without touching the rest of the application.
+A Spring Boot learning project built around a generic, domain-agnostic
+**Decision Engine** (`decisionengine` — rule filtering + weighted scoring +
+ranking, with zero knowledge of any specific domain) — in other words, a
+small **Decision Engine Framework**, not a single-purpose app. A **Workout
+Planner** module plugs into it as the first application. The generic flow
+is always the same regardless of domain — context in, hard rules filter, a
+scoring strategy ranks, feedback from history adapts the next round — see
+[The Decision Engine](#the-decision-engine) for how workout planning
+instantiates it, and the home page for where a second domain (finance, meal
+planning, ...) would plug in next.
 
-This is not a list-of-exercises app. The point of the project is to practice
-Spring Boot, Spring Security, Spring Data JPA, REST + MVC, database design,
+This is not a list-of-exercises app, and fitness is not the point — it's the
+first domain proving the engine is real, not aspirational (there's a unit
+test in `decisionengine` that exercises the core with made-up types
+unrelated to fitness). The point of the project is to practice Spring Boot,
+Spring Security, Spring Data JPA, REST + MVC, database design,
 clean/hexagonal architecture and classic design patterns using a real,
-non-trivial domain problem.
+non-trivial domain problem — one designed from the start to generalize.
 
 ## Table of contents
 
@@ -420,6 +428,7 @@ accounts](#test-accounts)).
 | v1.0 | Polish: this README, expanded exception handling and validation, final test pass (M7) |
 | v1.1 | Web parity with the API: `/profile` create/edit form, dashboard goal-override, `/admin/exercises` catalog editor, `/account/password`. Fixed a bug where regenerating a plan never deactivated the previous one. Added cloud-hosting basics: `Dockerfile`, `application-prod.yml`, `/actuator/health`, and dev-only seeded test accounts. |
 | v1.2 | Multi-domain home page (`/help` plus a "coming soon" card grid — fitness is domain #1 of what's meant to be several, see [Architecture](#architecture)). Fixed the `/dashboard/generate` and session-complete actions leaking an unhandled error page on expected failures. Closed several rule-engine gaps where profile data was captured but never used: rest days now drive real weekday scheduling, session length now trims (not pads) exercise slots, and completion %/perceived intensity now adjust the actual prescribed sets/rest ("too easy"/"too hard"), not just which difficulty tier gets picked. Added a "weak muscle group" scoring bonus. |
+| v1.3 | Clarified in the docs (name unchanged — still DME, Decision Making Engine) that this is architected as a general decision engine framework rather than a fitness app with a generic core bolted on — the distinction was already true in the code, just not said plainly. Added a 4th "coming soon" domain (Learning Path). No architecture change: evaluated and declined collapsing `Rule`/`ScoringStrategy` into one monolithic `DecisionStrategy` interface, since the current split is independently composable and a unified interface would be a regression, not a simplification. |
 
 ## Future AI integration
 

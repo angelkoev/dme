@@ -278,6 +278,52 @@ That's the entire generic algorithm. There's a unit test
 (`RuleBasedDecisionEngineTest`) that exercises this with made-up types
 unrelated to fitness, proving the module boundary is real.
 
+**The domain-agnostic flow, named explicitly.** Any domain plugging into
+`decisionengine` follows the same shape, whether it's workout planning,
+meal planning, or something not built yet:
+
+```
+Input (a GenerationRequest-shaped call)
+    │
+Collect user context      →  a domain's own "C" (FitnessDecisionContext for fitness)
+    │
+Apply rules (hard filter) →  Rule<C,T> list, AND-combined
+    │
+Calculate scores          →  ScoringStrategy<C,T>
+    │
+Rank results               →  RuleBasedDecisionEngine.rank() — filter, score, sort
+    │
+Generate recommendation    →  the domain assembles ranked picks into its own
+                               result shape (WorkoutPlan for fitness)
+    │
+Collect feedback           →  a domain's own history log (workout_logs for fitness)
+    │
+Update future decisions    →  a domain's own "recent activity" summary
+                               (RecentActivitySummary for fitness) feeds back
+                               into the context on the next generation
+```
+
+Fitness is the only domain that exists today, but nothing about
+`decisionengine`, `Rule`, or `ScoringStrategy` mentions fitness — a second
+domain supplies its own context/candidate types and its own rules/scoring,
+without touching this package at all. The home page's "coming soon" cards
+(`web.mvc.DecisionDomainCard`, §13) are where a second one would surface
+once built; none of them have any code behind them yet.
+
+**Why `Rule` and `ScoringStrategy` are two interfaces, not one.** A tempting
+alternative is a single `DecisionStrategy.generate(context)` interface with
+swappable whole-algorithm implementations (`RuleBasedStrategy`,
+`WeightedScoringStrategy`, `ConstraintBasedStrategy`, ...). That was
+considered and declined: filtering (constraints) and ranking (scoring) are
+different concerns that always both apply together, not alternatives you'd
+pick one of. The current split lets you change the scorer without touching
+a single rule, or add a rule without touching the scorer — a unified
+interface would force every combination to be its own class instead
+(`RuleBasedWeightedScoringStrategy`, `RuleBasedDecisionTreeStrategy`, ...),
+which is worse, not more flexible. `RuleBasedDecisionEngine` is exactly
+"rules + a scoring strategy, composed" — keeping them separate is the
+design, not a gap to close.
+
 ### 5.2 The fitness instantiation: `C = FitnessDecisionContext`, `T = Exercise`
 
 `FitnessDecisionContext` (`fitness/engine/FitnessDecisionContext.java`) bundles:
