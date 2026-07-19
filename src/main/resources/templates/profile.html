@@ -8,30 +8,140 @@
 <p><a th:href="@{/}">← Home</a></p>
 <h1>My Profile</h1>
 
-<div th:if="${noProfile}">
-    <p>You haven't filled in a profile yet. Use <code>PUT /api/v1/profile/me</code> to create one.</p>
-</div>
+<p th:if="${profileSaved}"><strong>Profile saved.</strong></p>
+<p th:if="${hasProfile == false}">You don't have a profile yet — fill this in and save to create one.</p>
 
-<div th:if="${profile}">
-    <ul>
-        <li>Goal: <span th:text="${profile.primaryGoal}"></span></li>
-        <li>Level: <span th:text="${profile.experienceLevel}"></span></li>
-        <li>Days per week: <span th:text="${profile.daysPerWeek}"></span></li>
-        <li>Session duration (min): <span th:text="${profile.sessionDurationMinutes}"></span></li>
-        <li>Location: <span th:text="${profile.location}"></span></li>
-        <li>Available equipment: <span th:text="${#strings.listJoin(profile.availableEquipment.![name], ', ')}"></span></li>
-        <li>Favorite exercises: <span th:text="${#strings.listJoin(profile.favoriteExercises.![name], ', ')}"></span></li>
-        <li>Disliked exercises: <span th:text="${#strings.listJoin(profile.dislikedExercises.![name], ', ')}"></span></li>
-        <li>Preferred categories: <span th:text="${profile.preferredCategories}"></span></li>
-        <li>Unwanted categories: <span th:text="${profile.unwantedCategories}"></span></li>
-        <li>Rest days: <span th:text="${profile.restDays}"></span></li>
-    </ul>
-    <h2>Limitations</h2>
-    <ul>
-        <li th:each="limitation : ${profile.limitations}">
-            <span th:text="${limitation.muscleGroup}"></span> — <span th:text="${limitation.note}"></span>
-        </li>
-    </ul>
-</div>
+<form th:action="@{/profile}" th:object="${profileForm}" method="post">
+
+    <fieldset>
+        <legend>About you</legend>
+        <div>
+            <label for="birthDate">Birth date</label>
+            <input id="birthDate" type="date" th:field="*{birthDate}"/>
+        </div>
+        <div>
+            <label for="sex">Sex</label>
+            <select id="sex" th:field="*{sex}">
+                <option value="">—</option>
+                <option th:each="s : ${sexes}" th:value="${s}" th:text="${s}"></option>
+            </select>
+        </div>
+        <div>
+            <label for="heightCm">Height (cm)</label>
+            <input id="heightCm" type="number" min="0" th:field="*{heightCm}"/>
+        </div>
+        <div>
+            <label for="weightKg">Weight (kg)</label>
+            <input id="weightKg" type="number" step="0.1" min="0" th:field="*{weightKg}"/>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Training setup</legend>
+        <div>
+            <label for="experienceLevel">Experience level</label>
+            <select id="experienceLevel" th:field="*{experienceLevel}" required="required">
+                <option th:each="level : ${experienceLevels}" th:value="${level}" th:text="${level}"></option>
+            </select>
+            <p th:if="${#fields.hasErrors('experienceLevel')}" th:errors="*{experienceLevel}"></p>
+        </div>
+        <div>
+            <label for="primaryGoal">Primary goal</label>
+            <select id="primaryGoal" th:field="*{primaryGoal}" required="required">
+                <option th:each="goal : ${trainingGoals}" th:value="${goal}" th:text="${goal}"></option>
+            </select>
+            <p th:if="${#fields.hasErrors('primaryGoal')}" th:errors="*{primaryGoal}"></p>
+        </div>
+        <div>
+            <label for="daysPerWeek">Days per week</label>
+            <input id="daysPerWeek" type="number" min="1" max="7" th:field="*{daysPerWeek}"/>
+            <p th:if="${#fields.hasErrors('daysPerWeek')}" th:errors="*{daysPerWeek}"></p>
+        </div>
+        <div>
+            <label for="sessionDurationMinutes">Session length (minutes)</label>
+            <input id="sessionDurationMinutes" type="number" min="10" th:field="*{sessionDurationMinutes}"/>
+            <p th:if="${#fields.hasErrors('sessionDurationMinutes')}" th:errors="*{sessionDurationMinutes}"></p>
+        </div>
+        <div>
+            <label for="location">Where you train</label>
+            <select id="location" th:field="*{location}" required="required">
+                <option th:each="loc : ${locations}" th:value="${loc}" th:text="${loc}"></option>
+            </select>
+            <p th:if="${#fields.hasErrors('location')}" th:errors="*{location}"></p>
+        </div>
+        <div>
+            <label for="notes">Notes</label><br/>
+            <textarea id="notes" rows="3" cols="50" th:field="*{notes}"></textarea>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Rest days</legend>
+        <label th:each="day : ${daysOfWeek}" style="margin-right: 1em;">
+            <input type="checkbox" th:field="*{restDays}" th:value="${day}"/>
+            <span th:text="${day}"></span>
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Available equipment</legend>
+        <label th:each="equipment : ${allEquipment}" style="margin-right: 1em;">
+            <input type="checkbox" th:field="*{equipmentIds}" th:value="${equipment.id}"/>
+            <span th:text="${equipment.name}"></span>
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Preferred muscle groups (nice to have more of)</legend>
+        <label th:each="mg : ${muscleGroups}" style="margin-right: 1em;">
+            <input type="checkbox" th:field="*{preferredCategories}" th:value="${mg}"/>
+            <span th:text="${mg}"></span>
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Unwanted muscle groups (avoid entirely)</legend>
+        <label th:each="mg : ${muscleGroups}" style="margin-right: 1em;">
+            <input type="checkbox" th:field="*{unwantedCategories}" th:value="${mg}"/>
+            <span th:text="${mg}"></span>
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Injuries / limitations</legend>
+        <p>Pick the affected muscle group (optional) and describe the limitation.
+            Leave a row's note blank to skip it, or clear an existing note to remove that limitation.</p>
+        <div th:each="lim, iter : *{limitations}">
+            <select th:field="*{limitations[__${iter.index}__].muscleGroup}">
+                <option value="">— not muscle-specific —</option>
+                <option th:each="mg : ${muscleGroups}" th:value="${mg}" th:text="${mg}"></option>
+            </select>
+            <input type="text" placeholder="e.g. sharp pain when extending"
+                   th:field="*{limitations[__${iter.index}__].note}" size="40"/>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Favorite exercises</legend>
+        <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5em;">
+            <label th:each="ex : ${allExercises}" style="display: block;">
+                <input type="checkbox" th:field="*{favoriteExerciseIds}" th:value="${ex.id}"/>
+                <span th:text="${ex.name} + ' (' + ${ex.primaryMuscleGroup} + ')'"></span>
+            </label>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Disliked exercises</legend>
+        <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5em;">
+            <label th:each="ex : ${allExercises}" style="display: block;">
+                <input type="checkbox" th:field="*{dislikedExerciseIds}" th:value="${ex.id}"/>
+                <span th:text="${ex.name} + ' (' + ${ex.primaryMuscleGroup} + ')'"></span>
+            </label>
+        </div>
+    </fieldset>
+
+    <button type="submit">Save profile</button>
+</form>
 </body>
 </html>

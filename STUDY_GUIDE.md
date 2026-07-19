@@ -1,0 +1,622 @@
+# DME Study Guide — How Everything Works
+
+This is a deep-dive companion to `README.md`, written to be read start-to-finish
+so you can rebuild your mental model of this project from scratch later
+(e.g. after a break from Claude Code / this subscription). Where useful it
+points at exact files and line numbers so you can jump straight to the code.
+
+If you only remember one thing: **this project is a hexagonal/clean-architecture
+Spring Boot app whose "product" is a rule-based Decision Engine that picks
+exercises for a workout plan.** Everything else (auth, persistence, MVC pages)
+exists to support exercising that engine end-to-end.
+
+---
+
+## 1. What this project is (and isn't)
+
+- **Purpose**: a learning project to practice Spring Boot, Spring Security,
+  Spring Data JPA, REST + server-rendered MVC, database design (MySQL +
+  Flyway), hexagonal/clean layering, and classic GoF design patterns — using
+  a real, non-trivial domain (personalized workout generation) rather than a
+  toy CRUD app.
+- **Not** a static list-of-exercises app. The interesting part is
+  `decisionengine` + `fitness.engine`: given a user's profile and recent
+  training history, rank a catalog of exercises and assemble a multi-session
+  plan.
+- **No AI is called today.** The "intelligence" is hand-written rules +
+  weighted scoring. Three interfaces (`fitness.engine.assist`) are seams
+  where an LLM-backed implementation could be swapped in later without
+  touching the engine, controllers, or services (see §7).
+- **Tech stack**: Java 25, Spring Boot 4.1.0 (spring-boot-starter-parent),
+  Spring Data JPA / Hibernate, Spring Security 6 (JWT + form login), Spring
+  MVC + Thymeleaf, MySQL 8.4, Flyway (versioned migrations V1–V12), Lombok,
+  jjwt 0.12.6 for JWT, JUnit 5 + Mockito + Testcontainers for tests.
+  See `pom.xml`.
+
+---
+
+## 2. Layered architecture
+
+```
+web.api (REST @RestController)   web.mvc (Thymeleaf @Controller)
+                    \                  /
+                 application.service (use-case orchestration)
+                              |
+   fitness.engine (fitness-specific) --uses--> decisionengine (generic core)
+                              |
+        domain.model (plain objects)  +  domain.repository (interfaces/ports)
+                              |
+   infrastructure.persistence (JPA entities, mappers, repository adapters)
+   infrastructure.security (JWT, UserDetailsService, SecurityConfig)
+                              |
+                     MySQL (Flyway-versioned)
+```
+
+The dependency rule: arrows only point **downward**. `domain.model` has zero
+framework annotations (no `@Entity`, no JPA) — it's plain Java + Lombok.
+`infrastructure.persistence.entity` holds the actual `@Entity` classes, and
+a parallel set of `infrastructure.persistence.mapper` classes converts
+between `XxxEntity` and the domain `Xxx`. This is more boilerplate than just
+using `@Entity` classes everywhere, but it buys two things:
+
+1. `application.service` and `fitness.engine` never import Hibernate.
+2. The entire rule/scoring engine can be unit-tested with **plain
+   constructed objects and no Spring context at all** — see §8.
+
+`domain.repository` holds interface-only **ports** (e.g. `ExerciseRepository`,
+`UserRepository`). `infrastructure.persistence.repository` has the
+implementations: a thin Spring Data JPA repository (`ExerciseJpaRepository`)
+plus an `Adapter` class (`ExerciseRepositoryAdapter`) that implements the
+domain port by delegating to the JPA repo and mapping entities <-> domain
+objects. This Adapter pattern is what lets `application.service` code depend
+only on `domain.repository` interfaces (Dependency Inversion).
+
+### Package tour (where to find things)
+
+| Package | Contents |
+|---|---|
+| `decisionengine` | Generic core: `Rule<C,T>`, `ScoringStrategy<C,T>`, `DecisionEngine<C,T>`/`RuleBasedDecisionEngine<C,T>`, `ScoredCandidate<T>`. Zero fitness knowledge — reusable for any ranking problem. |
+| `fitness.engine` | Fitness plugs into the generic core: `FitnessDecisionContext` (the `C`), `Exercise` (the `T`, from `domain.model`), `RecentActivitySummary`(`Builder`), the `WorkoutPlanGenerator` port, `GenerationRequest`. |
+| `fitness.engine.rulebased` | v1 (only) implementation: `RuleBasedWorkoutPlanGenerator`, `rules/` (6 hard filters), `scoring/FitnessExerciseScorer`, `strategy/` (5 `GoalWorkoutStrategy` + `GoalStrategyResolver`). |
+| `fitness.engine.assist` | The AI-ready seam: `AmbiguityResolver`, `WorkoutExplanationService`, `MotivationalMessageService` interfaces + template (non-AI) default impls. |
+| `domain.model` | Plain domain objects: `User`, `UserProfile`, `Exercise`, `WorkoutPlan`, `WorkoutSession`, `SessionExercise`, `WorkoutLog`, `PersonalRecord`, `WorkoutStreak`, `Equipment`, `Role`, plus enums. |
+| `domain.repository` | Port interfaces only (`UserRepository`, `ExerciseRepository`, `WorkoutPlanRepository`, etc.). |
+| `application.service` | Use-case orchestration: `AuthService`, `UserProfileService`, `ExerciseService`, `WorkoutPlanService`. Also holds `*Command`/`*Result` records — the internal request/response shapes between web and service layers. |
+| `infrastructure.persistence.entity` | `@Entity` classes mirroring the schema. |
+| `infrastructure.persistence.mapper` | Entity <-> domain object conversion. |
+| `infrastructure.persistence.repository` | Spring Data JPA repos (`XxxJpaRepository`) + `XxxRepositoryAdapter` implementing the domain port. |
+| `infrastructure.security` | `SecurityConfig`, `CustomUserDetails`(`Service`), `RestAuthenticationEntryPoint`/`RestAccessDeniedHandler`, and `jwt/` (`JwtAuthFilter`, `JwtService`, `JwtProperties`). |
+| `web.api` | REST controllers (`AuthController`, `ProfileController`, `ExerciseController`, `WorkoutPlanController`, `ProgressController`, `CurrentUserController`) + `dto/` (request/response records). |
+| `web.mvc` | Thymeleaf controllers (`HomeController`, `LoginController`, `RegisterController`, `DashboardController`, `ProfileViewController`, `ProgressViewController`, `ExerciseViewController`). |
+| `web.exception` | `ApiExceptionHandler` (REST-only `@RestControllerAdvice`), `ApiError`. |
+
+### Design patterns actually in the code (not just claimed)
+
+| Pattern | Where | Why it's real, not decorative |
+|---|---|---|
+| Strategy | `GoalWorkoutStrategy` (one class per `TrainingGoal`), `ScoringStrategy` | `GoalStrategyResolver` picks one at runtime; the generator never branches on goal itself. |
+| Chain of Responsibility / Specification | `Rule<C,T>` list in `RuleBasedDecisionEngine.isAdmissible` | AND-combines an injected `List<Rule<...>>` via `allMatch` — adding a 7th rule is a new `@Component`, zero changes to the engine. |
+| Factory | `GoalStrategyResolver` | Builds a `Map<TrainingGoal, GoalWorkoutStrategy>` from all `GoalWorkoutStrategy` beans Spring hands it. |
+| Template Method | `RuleBasedWorkoutPlanGenerator.generate()` | Fixed skeleton (resolve strategy → build activity summary → loop sessions → loop slots → rank → pick) with pluggable steps (rules, scorer, tie-breaker). |
+| Builder | Nearly every domain model, via Lombok `@Builder` | e.g. `FitnessDecisionContext.builder()...build()` in `RuleBasedWorkoutPlanGenerator.buildSession`. |
+| Adapter | `infrastructure.persistence.repository.*Adapter` | e.g. `ExerciseRepositoryAdapter` implements `domain.repository.ExerciseRepository` by wrapping `ExerciseJpaRepository` + `ExerciseMapper`. |
+| Port/Adapter (Hexagonal) | `WorkoutPlanGenerator` interface vs. `RuleBasedWorkoutPlanGenerator` | The whole point of §7 — an `AiWorkoutPlanGenerator` could implement the same port. |
+
+---
+
+## 3. Database schema
+
+MySQL 8.4, fully versioned by Flyway migrations `V1`–`V12` in
+`src/main/resources/db/migration/`. Nothing is created by Hibernate
+(`ddl-auto: validate` in `application.yml` — Hibernate checks the schema
+matches the entities but never generates DDL).
+
+| Migration | What it adds |
+|---|---|
+| V1 | `users`, `roles`, `user_roles` (auth identity + RBAC) |
+| V2 | `equipment` lookup, `user_profiles` (1:1 with `users`, PK = `user_id`), `user_equipment`, `user_limitations` |
+| V3 | `exercises`, `exercise_equipment` |
+| V4 | `workout_plans` → `workout_sessions` → `session_exercises` (the generated-plan tree) |
+| V5 | Seeds `ROLE_USER`, `ROLE_ADMIN` |
+| V6 | Seeds 9 equipment rows (Bodyweight, Dumbbell, Barbell, Kettlebell, Resistance Band, Pull-up Bar, Bench, Cable Machine, Machine) |
+| V7 | Adds `user_profiles.location`, `user_rest_days` |
+| V8 | `user_favorite_exercises`, `user_disliked_exercises` |
+| V9 | `user_preferred_categories`, `user_unwanted_categories` (by `muscle_group`) |
+| V10 | `workout_logs` (a completed session) + index on `(user_id, performed_at)` |
+| V11 | `personal_records`, `workout_streaks`, `user_favorite_workout_plans` |
+| V12 | Seeds 28 exercises spanning every muscle group / movement pattern / difficulty / equipment combination, plus their `exercise_equipment` rows |
+
+Key modeling decisions worth remembering:
+
+- **`equipment` is reused for both directions**: `user_equipment` ("what the
+  user owns") and `exercise_equipment` ("what the exercise needs") point at
+  the same lookup table. This is exactly why `EquipmentAvailabilityRule` can
+  be a one-line `Set.containsAll` check (§5).
+- **`@ElementCollection`s instead of tables-with-entities** for things that
+  are just enum sets: `user_rest_days`, `user_preferred_categories`,
+  `user_unwanted_categories`. No Java entity class backs these — Hibernate
+  maps them straight from a `Set<Enum>` field.
+- **`workout_plans.generation_source`** (`RULE_BASED` / `AI`) exists from V4
+  — a future AI generator needs no migration, just a new enum value being
+  written.
+- **`workout_logs`** is the table that makes generation *adaptive*. Nothing
+  else in the schema feeds back into exercise selection — see
+  `RecentActivitySummaryBuilder` in §6.
+- **`session_exercises.exercise_id` has `ON DELETE RESTRICT`**, unlike almost
+  everything else which cascades — you cannot delete an `Exercise` that is
+  referenced by a historical plan.
+
+---
+
+## 4. Security model
+
+Two independent `SecurityFilterChain` beans in `infrastructure/security/SecurityConfig.java`:
+
+### `/api/**` chain (`@Order(1)`) — stateless JWT
+- `securityMatcher("/api/**")`, CSRF disabled, `SessionCreationPolicy.STATELESS`.
+- `/api/v1/auth/**` and `GET /api/v1/exercises/**` / `GET /api/v1/equipment/**`
+  are `permitAll()`; everything else requires authentication.
+- `JwtAuthFilter` (a `OncePerRequestFilter`) runs before
+  `UsernamePasswordAuthenticationFilter`: reads the `Authorization: Bearer <token>`
+  header, verifies+parses it via `JwtService` (HS256, `jjwt`), loads a
+  `UserDetails` via `CustomUserDetailsService`, and manually populates
+  `SecurityContextHolder`. A bad/expired token is swallowed silently
+  (`catch (JwtException | IllegalArgumentException ignored)`) — the request
+  just proceeds unauthenticated, and `RestAuthenticationEntryPoint` turns
+  that into a JSON 401 later if the endpoint required auth.
+- **Token issuance**: `AuthService.login()` calls Spring's
+  `AuthenticationManager.authenticate(...)` (which internally re-validates
+  the password via the same `BCryptPasswordEncoder` + `CustomUserDetailsService`
+  used everywhere else), then `JwtService.issueToken(username, roles)` signs
+  a token with the `subject` = username, a `roles` claim, and a 60-minute
+  expiry (`app.jwt.expiration-minutes`, `application.yml`).
+- `app.jwt.secret` defaults to a dev placeholder
+  (`dev-only-secret-change-me-please-use-a-long-random-value`) unless
+  `JWT_SECRET` env var is set — **must** be overridden for any real deployment.
+
+### Everything else chain (`@Order(2)`) — session + form login
+- `/`, `/login`, `/register`, `/exercises`, `/exercises/**`, `/css/**`,
+  `/js/**` are public; everything else needs an authenticated session.
+- Standard `formLogin()` targeting `/login`, redirecting to `/` on success;
+  standard `logout()`.
+- CSRF is **enabled** here (unlike the API chain) — Thymeleaf's Spring
+  integration auto-injects the CSRF token into `th:action` forms, so none of
+  the templates need to handle it manually.
+
+### Shared plumbing
+- Both chains share `CustomUserDetailsService` (backed by the domain
+  `UserRepository` port — not JPA directly) and one `BCryptPasswordEncoder`
+  bean.
+- `@EnableMethodSecurity` + `@PreAuthorize("hasRole('ADMIN')")` guards the
+  exercise-catalog write endpoints (`POST`/`PUT /api/v1/exercises`) — see
+  `ExerciseController`.
+- `CustomUserDetails` wraps the domain `User` and exposes its id via
+  `getId()`/`getDomainUser()` — every controller that needs "the current
+  user" takes `@AuthenticationPrincipal CustomUserDetails principal` and
+  calls `principal.getId()`.
+
+### Error shape consistency
+`ApiExceptionHandler` (`web/exception/ApiExceptionHandler.java`) is scoped to
+`web.api` only (`@RestControllerAdvice(basePackages = "com.akoev.dme.web.api")`)
+so Thymeleaf pages get normal HTML error pages instead. Every REST error body
+is `{"message": "..."}` (`ApiError`), regardless of which layer raised it:
+
+| Exception | Status | Note |
+|---|---|---|
+| `ResponseStatusException` | whatever status it carries | This is how the service layer signals expected, user-facing failures (404 no profile, 403 not your plan, etc.) |
+| `IllegalArgumentException` | 409 | Used for things like "username already taken" |
+| `BadCredentialsException` | 401 | |
+| `AccessDeniedException` | 403 | Covers both `@PreAuthorize` denials (caught here) and filter-chain-level denials (caught earlier by `RestAccessDeniedHandler`, same shape) |
+| `MethodArgumentNotValidException` | 400 | Bean validation failures, message lists `field: reason` |
+| `HttpMessageNotReadableException` | 400 | Malformed JSON body |
+| `MethodArgumentTypeMismatchException` | 400 | e.g. non-numeric path variable |
+| anything else | 500 | Generic message, no leakage of internal details |
+
+Note there is **deliberately no handler for `IllegalStateException`** — it's
+reserved for genuine server misconfiguration (e.g. `GoalStrategyResolver`
+finding no strategy bean for a goal, or the `ROLE_USER` seed missing) and
+intentionally surfaces as an opaque 500.
+
+---
+
+## 5. The Decision Engine — deep dive
+
+This is the part of the codebase worth understanding cold, since it's the
+whole point of the project.
+
+### 5.1 The generic core (`decisionengine`, zero fitness knowledge)
+
+```java
+public interface Rule<C, T> {
+    boolean isSatisfiedBy(C context, T candidate);
+    String description();
+}
+
+public interface ScoringStrategy<C, T> {
+    double score(C context, T candidate);
+}
+
+public interface DecisionEngine<C, T> {
+    List<ScoredCandidate<T>> rank(C context, List<T> candidates);
+}
+
+public record ScoredCandidate<T>(T candidate, double score) {}
+```
+
+`RuleBasedDecisionEngine<C, T>` is the only implementation:
+
+```java
+candidates.stream()
+    .filter(candidate -> rules.stream().allMatch(r -> r.isSatisfiedBy(context, candidate)))  // hard filter, AND semantics
+    .map(candidate -> new ScoredCandidate<>(candidate, scoringStrategy.score(context, candidate)))
+    .sorted(Comparator.comparingDouble(ScoredCandidate<T>::score).reversed())                 // best first
+    .toList();
+```
+
+That's the entire generic algorithm. There's a unit test
+(`RuleBasedDecisionEngineTest`) that exercises this with made-up types
+unrelated to fitness, proving the module boundary is real.
+
+### 5.2 The fitness instantiation: `C = FitnessDecisionContext`, `T = Exercise`
+
+`FitnessDecisionContext` (`fitness/engine/FitnessDecisionContext.java`) bundles:
+- `UserProfile profile` — goal, experience level, equipment, favorites/dislikes,
+  preferred/unwanted categories, injuries (`limitations`), location, rest days.
+- `RecentActivitySummary recentActivity` — see §5.5.
+- `MovementPattern targetMovementPattern` — which slot in the session blueprint
+  is currently being filled (see §5.4).
+
+### 5.3 The six rules (all hard filters, `fitness.engine.rulebased.rules`)
+
+A candidate `Exercise` must pass **every** rule to be scored at all:
+
+| Rule | Check |
+|---|---|
+| `EquipmentAvailabilityRule` | `profile.availableEquipment.containsAll(exercise.requiredEquipment)` |
+| `ExperienceLevelRule` | `rank(exercise.difficultyLevel) <= rank(profile.experienceLevel)` — uses an explicit `switch`-based rank rather than `.ordinal()`, specifically so that `DifficultyLevel` and `ExperienceLevel` (two independently-declared enums) can't silently desync if one gets reordered |
+| `InjuryContraindicationRule` | none of `profile.limitations[].muscleGroup` equals `exercise.primaryMuscleGroup` |
+| `DislikedExerciseRule` | exercise id not in `profile.dislikedExercises` |
+| `UnwantedCategoryRule` | `exercise.primaryMuscleGroup` not in `profile.unwantedCategories` |
+| `MovementPatternMatchRule` | `exercise.movementPattern == context.targetMovementPattern` (this is what actually ties an exercise to "which slot" it can fill) |
+
+If **no** exercise survives all six rules for a slot, that slot is simply
+skipped (`RuleBasedWorkoutPlanGenerator.buildSession`, `if (chosen == null) continue;`)
+— generation degrades gracefully instead of failing the whole plan.
+
+### 5.4 Scoring (`FitnessExerciseScorer`, base score 50)
+
+| Signal | Effect | Code |
+|---|---|---|
+| Compound vs. isolation matches goal (Strength/Hypertrophy favor compound; Fat Loss/Endurance/General favor isolation) | +20 | `goalFitScore` |
+| In `profile.favoriteExercises` | +15 | `favoriteScore` |
+| Targets a `profile.preferredCategories` muscle group | +10 | `preferredCategoryScore` |
+| Exercise id in `recentActivity.recentlyUsedExerciseIds` (used in last 14 days) | −30 | `recencyPenalty` |
+| Muscle group trained recently | −12 **per recent session** that hit it | `overtrainingPenalty` |
+| `lastCompletionPercentage < 60` | +10 if `BEGINNER` difficulty, else −10 (deload) | `difficultyAdjustment` |
+| `lastCompletionPercentage > 90` | +10 if `ADVANCED` difficulty, else 0 (progressive overload) | `difficultyAdjustment` |
+| — | + random jitter in `[0, 5)` (breaks ties among otherwise-equal exercises for variety) | `ThreadLocalRandom` |
+
+Every fixed weight is ≥ 2× the max jitter (5), so signal ordering can never
+be accidentally flipped by the random component — this is asserted directly
+in `FitnessExerciseScorerTest`. The comment in the source calls out the
+12-vs-10(2×5) margin on the overtraining penalty specifically, because that
+penalty is the smallest per-unit weight and must still dominate jitter even
+after just **one** recent session.
+
+### 5.5 `RecentActivitySummary` — what makes generation adaptive
+
+Built per-user by `RecentActivitySummaryBuilder.build(userId)` from
+`workout_logs` within a **14-day window**:
+- `recentlyUsedExerciseIds` — every exercise id from every session logged
+  in the window (via `workout_sessions.exercises` → `SessionExercise.exercise`).
+- `recentLoadByMuscleGroup` — count of sessions per `MuscleGroup` in the window.
+- `lastCompletionPercentage` — from the single most recent `WorkoutLog`.
+- `daysSinceLastWorkout` — days between now and that log's `performedAt`.
+- `averageRating` — mean of `WorkoutLog.rating` across the window (nulls filtered).
+
+If there are no logs at all, `RecentActivitySummary.empty()` is used (all
+fields empty/null) — a brand-new user's first plan is unaffected by any of
+the recency/overtraining/difficulty scoring terms.
+
+### 5.6 The five `GoalWorkoutStrategy` implementations
+
+Each decides (a) the weekly split — a list of `SessionBlueprint(name, movementPatternSlots)`
+— and (b) the `SetRepScheme(sets, repMin, repMax, restSeconds)`. `daysPerWeek`
+is clamped to `[1, 6]` via `Math.clamp` in every implementation.
+
+| Goal | Split logic | Sets × Reps | Rest |
+|---|---|---|---|
+| `STRENGTH` | Every day is full-body: `LEGS, PUSH, PULL, CORE` | 4 × 3–6 | 150s |
+| `HYPERTROPHY` | Cycles Push/Pull/Legs (`PUSH_PULL_LEGS_CYCLE`), 4 slots of the day's focus + 1 `CORE` slot | 4 × 8–12 | 75s |
+| `FAT_LOSS` | Every day: `FULL_BODY, LEGS, PUSH, PULL, CORE` circuit | 3 × 12–20 | 30s |
+| `ENDURANCE` | Every day: `FULL_BODY, LEGS, CORE, PUSH, PULL` | 3 × 15–25 | 30s |
+| `GENERAL_FITNESS` | Every day: `PUSH, PULL, LEGS, CORE` | 3 × 10–15 | 60s |
+
+`GoalStrategyResolver` is a one-line Factory: it collects every
+`GoalWorkoutStrategy` Spring bean into a `Map<TrainingGoal, GoalWorkoutStrategy>`
+at construction time (via `supportedGoal()`), then `.resolve(goal)` is a map
+lookup that throws `IllegalStateException` if a goal has no registered
+strategy (a misconfiguration bug, not a user error → falls to 500, §4).
+
+### 5.7 Putting it together: `RuleBasedWorkoutPlanGenerator.generate()`
+
+1. Load the `User` (→ 400/404 flow: `IllegalArgumentException` if the user id
+   itself doesn't exist — this is an internal invariant violation since the
+   id comes from the authenticated principal, not user input; `ResponseStatusException(404)`
+   if the user exists but has no `UserProfile` yet).
+2. Resolve `goal` = request override or `profile.primaryGoal`; resolve the
+   matching `GoalWorkoutStrategy`.
+3. Build `RecentActivitySummary` for the user (§5.5).
+4. Load the **entire** exercise catalog once (`exerciseRepository.findAll()`)
+   — filtering happens in memory per slot, not via SQL `WHERE` clauses. Fine
+   at 28 seed rows; would need revisiting at catalog scale (see §9).
+5. Construct one `RuleBasedDecisionEngine<FitnessDecisionContext, Exercise>`
+   for the whole generation (rules + scorer are stateless singletons, safe
+   to reuse across slots).
+6. For each `SessionBlueprint` in the goal's split, for each movement-pattern
+   slot in that blueprint:
+   - Build a fresh `FitnessDecisionContext` targeting that slot's pattern.
+   - Exclude any exercise already used **elsewhere in this same plan**
+     (`usedInThisPlan`, a running `Set<Long>`) — guarantees no repeats within
+     one generated plan.
+   - Rank the remaining catalog through the engine.
+   - `pickBest`: if the top two scores are within `TIE_SCORE_TOLERANCE = 1.0`
+     of each other, delegate to `AmbiguityResolver.resolveTie(...)` (today:
+     `NoOpAmbiguityResolver` just takes candidate #1, since the list is
+     already sorted best-first — this is the seam an AI tie-breaker would
+     plug into). Otherwise take candidate #1 directly.
+   - If ranking is empty, skip the slot.
+7. Assemble `WorkoutSession`s (with `SessionExercise`s carrying the
+   `SetRepScheme` values) into a `WorkoutPlan` with
+   `generationSource = RULE_BASED`, `active = true`, `generatedAt = now`.
+
+`WorkoutPlanService.generate()` (application layer) then **persists** that
+plan, loads the (now-saved) user again, and calls
+`WorkoutExplanationService.explain()` + `MotivationalMessageService.motivate()`
+to build the human-readable response (`GenerationResult`).
+
+---
+
+## 6. User journey / request flows
+
+### Register → log in (API)
+```
+POST /api/v1/auth/register {username, email, password}  → 201, AuthController → AuthService.register()
+POST /api/v1/auth/login    {username, password}          → 200 {token, "Bearer"}, AuthController → AuthService.login()
+```
+`AuthService.register` checks username/email uniqueness (→ 409 via
+`IllegalArgumentException` if taken), looks up the seeded `ROLE_USER`,
+hashes the password with `BCryptPasswordEncoder`, saves via `UserRepository`.
+`login` re-uses Spring's `AuthenticationManager` (so the exact same
+credential-checking path as any other Spring Security integration is
+exercised) then mints a JWT via `JwtService`.
+
+### Register → log in (browser)
+`/register` (`RegisterController`) and `/login` (`LoginController`,
+`formLogin()`) render Thymeleaf pages; the browser then holds a session
+cookie instead of a bearer token.
+
+### Fill in profile
+```
+PUT /api/v1/profile/me  (ProfileController → UserProfileService.updateProfile)
+```
+One call replaces the whole `UserProfile` (goal, experience, days/week,
+session length, location, equipment ids, favorite/disliked exercise ids,
+preferred/unwanted categories, injuries, rest days). Note
+`UpdateProfileRequest` (web DTO) → `ProfileUpdateCommand` (application-layer
+record) mapping happens **in the controller**, not via a static factory on
+the Command — deliberately, so `application.service` never depends on
+`web.api.dto` (see the comment in `ProfileController.toCommand`).
+
+### Generate a plan
+```
+POST /api/v1/workout-plans/generate  (optional {goalOverride})
+```
+→ `WorkoutPlanService.generate()` → `RuleBasedWorkoutPlanGenerator.generate()`
+(§5.7) → saved via `WorkoutPlanRepository` → response includes the plan +
+`explanation` + `motivation` text (`GenerateWorkoutPlanResponse`).
+
+### View the plan
+`GET /api/v1/workout-plans/active` (the one currently `active=true`),
+`GET /api/v1/workout-plans` (history), `GET /api/v1/workout-plans/{id}`
+(ownership-checked: 403 if `plan.userId != principal.getId()`), or the
+`/dashboard` Thymeleaf page.
+
+### Perform + log a session
+```
+POST /api/v1/workout-plans/{planId}/sessions/{sessionId}/complete
+  {completionPercentage, rating, perceivedIntensity, notes, exercisePerformances[]}
+```
+`WorkoutPlanService.completeSession`:
+1. Verifies the plan belongs to the user and the session belongs to the plan.
+2. Saves a `WorkoutLog` row.
+3. `updateStreak`: if `lastWorkoutDate == yesterday` → increment; if
+   `== today` → no-op (already logged today); otherwise reset to 1.
+   `longestStreak = max(longestStreak, newCurrentStreak)`.
+4. `detectPersonalRecords`: for each `exercisePerformances[]` entry
+   (validated to belong to this session, else 400), checks
+   `weightKg`/`reps` against the user's current best
+   (`PersonalRecordRepository.findBestByUserIdAndExerciseIdAndMetricType`)
+   for `MAX_WEIGHT`/`MAX_REPS` respectively, and inserts a new
+   `PersonalRecord` only if it's a strict improvement. This method is
+   `synchronized` specifically to close a check-then-act race on concurrent
+   completions for the same (user, exercise, metric) — see the comment in
+   `WorkoutPlanService.maybeSavePersonalRecord`; it's a single-JVM guard,
+   which the code explicitly notes matches this project's actual deployment
+   model (no horizontal scaling).
+
+### Adaptive feedback loop
+The next `generate()` call rebuilds `RecentActivitySummary` from the logs
+just written, so recently-used exercises/muscle groups score lower and a low
+completion percentage nudges difficulty down (or a high one nudges it up) —
+see §5.4/§5.5. This is the entire "learning" mechanism; there's no ML model.
+
+### Progress
+`GET /api/v1/me/streak`, `/personal-records`, `/workout-history`
+(`ProgressController`, thin — reads straight from the repositories, no
+service class) or the `/progress` Thymeleaf page.
+
+---
+
+## 7. The AI-ready seam (`fitness.engine.assist`)
+
+Three narrow interfaces, each with a template (non-AI) default `@Component`
+already wired in via normal Spring bean injection:
+
+| Interface | Called when | Default impl | What it returns |
+|---|---|---|---|
+| `AmbiguityResolver` | Top-2 candidates for a slot score within 1.0 of each other | `NoOpAmbiguityResolver` | Just candidate #1 (already-sorted) |
+| `WorkoutExplanationService` | Every successful `generate()` | `TemplateWorkoutExplanationService` | A one-line templated string, e.g. "Generated a 4-session HYPERTROPHY plan matched to your INTERMEDIATE experience level and available equipment." |
+| `MotivationalMessageService` | Every successful `generate()` | `TemplateMotivationalMessageService` | A canned message keyed off `daysSinceLastWorkout` (welcome / same-day praise / "it's been a while" / "keep it up") |
+
+**How you'd actually add AI later**: write `AiAmbiguityResolver` /
+`AiWorkoutExplanationService` / `AiMotivationalMessageService` implementing
+these same interfaces (backed by whatever LLM call), then either mark it
+`@Primary` or gate the template vs. AI beans behind a Spring `@Profile`.
+Nothing in `RuleBasedWorkoutPlanGenerator`, `WorkoutPlanService`, or any
+controller needs to change — that's the entire point of depending on the
+interface rather than the concrete class.
+
+The bigger swap — an AI-backed generator instead of just AI-backed
+explanations — is the same pattern one level up: `WorkoutPlanGenerator` is
+itself a port (`fitness.engine.WorkoutPlanGenerator`); `RuleBasedWorkoutPlanGenerator`
+is its only implementation today. An `AiWorkoutPlanGenerator` (or a hybrid
+that falls back to rule-based) implementing the same interface, wired via
+`@Primary`/profile, is a drop-in replacement. `workout_plans.generation_source`
+already distinguishes `RULE_BASED` from `AI` (added in V4, years before any
+AI code exists) specifically so this swap needs no migration.
+
+---
+
+## 8. Testing strategy
+
+- **No-Spring-context tests** for the core logic: `Rule`/`ScoringStrategy`
+  implementations and `RuleBasedDecisionEngine`/`RuleBasedWorkoutPlanGenerator`
+  are constructed directly with `new` in test code (see
+  `RuleBasedDecisionEngineTest`, `FitnessExerciseScorerTest`, the individual
+  rule tests, `RuleBasedWorkoutPlanGeneratorTest` with Mockito-mocked repo
+  ports). Fast feedback loop, no database needed.
+- **`AbstractIntegrationTest`** (`src/test/java/.../AbstractIntegrationTest.java`):
+  starts **one** MySQL Testcontainer as a **JVM-wide singleton**, started in
+  a static initializer rather than per-test-class `@Testcontainers`
+  lifecycle. The code comment explains why: per-class lifecycle recreated a
+  container per test class and was unreliable on this Windows/Docker Desktop
+  setup. It also waits for the MySQL "ready for connections" log line
+  **twice**, because the official MySQL image restarts its server process
+  once during first-time initialization, and waiting for just one such line
+  can report ready before that restart, causing flaky connection-refused
+  errors. Cleanup is via the Testcontainers Ryuk reaper at JVM shutdown, not
+  explicit teardown code.
+- All classes touching the DB or HTTP layer extend that base class and reuse
+  the same container + Spring context cache across test classes.
+- Controller/security tests use `MockMvc`
+  (`@AutoConfigureMockMvc`). Some (`WebLoginFlowTest`,
+  `DashboardControllerTest`, `ProgressViewControllerTest`) actually render
+  the real Thymeleaf templates with real data — this is called out in the
+  README as having caught a genuine bug (`dashboard.html` used `session` as
+  a `th:each` loop variable name, which Thymeleaf reserves internally) that a
+  REST-only test suite would never have found.
+- The Maven Surefire config forces IPv4
+  (`-Djava.net.preferIPv4Stack=true`) specifically to avoid an IPv6-first
+  `localhost` resolution race against Testcontainers on Windows + Docker
+  Desktop (`pom.xml` comment).
+
+Run everything: `./mvnw test`.
+
+---
+
+## 9. Running locally
+
+```bash
+docker compose up -d          # MySQL 8.4 on localhost:3306, db/user/pass = dme/dme/dme
+./mvnw spring-boot:run         # runs with "dev" profile → application-dev.yml
+```
+
+Flyway seeds roles/equipment/28-exercise catalog on first startup
+automatically. Register at `POST /api/v1/auth/register` or
+`http://localhost:8080/register`; then either call the API with the JWT from
+`/api/v1/auth/login`, or log in at `http://localhost:8080/login` for the
+browser/session flow.
+
+`application.yml` (prod-ish defaults) + `application-dev.yml` (local
+overrides: datasource/flyway pointed at the docker-compose MySQL) is the
+whole Spring profile setup — there's no `application-prod.yml` yet.
+`app.jwt.secret` **must** be overridden via the `JWT_SECRET` env var outside
+of local dev.
+
+---
+
+## 10. Known limitations / places to think before "upgrading"
+
+These aren't bugs so much as places where the v1 scope was deliberately kept
+small — worth knowing before you extend anything:
+
+- **Catalog loaded entirely into memory per generation** (`exerciseRepository.findAll()`
+  in `RuleBasedWorkoutPlanGenerator.generate()`). Fine at 28 rows; if you
+  grow the catalog a lot, filtering (movement pattern, equipment) should
+  move into the query instead of happening after loading everything.
+- **`personalRecord` race guard is a single-JVM `synchronized`** — explicitly
+  noted as matching current deployment (one instance), but it will silently
+  stop being correct if the app is ever horizontally scaled; would need a
+  DB-level unique constraint + upsert, or a pessimistic lock, instead.
+- **No pagination anywhere** (`GET /api/v1/exercises`, `/workout-plans`,
+  `/workout-history` all return full lists) — fine at seed-catalog scale,
+  not at real scale.
+- **`RestAccessDeniedHandler`/`RestAuthenticationEntryPoint` vs.
+  `ApiExceptionHandler`** overlap in shape (both produce `{"message": ...}`
+  for 401/403) but live in different layers (filter chain vs. controller
+  advice) — worth remembering if you ever touch one, so you update the
+  other to match.
+- **v0.8+ roadmap (per README), not built**: full gamification
+  (achievements/badges catalog, levels, weekly/monthly goal dashboards,
+  charts), a real AI-backed `AmbiguityResolver`/`WorkoutExplanationService`/
+  `MotivationalMessageService` (§7), and — as proof `decisionengine` is
+  genuinely domain-agnostic — a second decision domain (e.g. nutrition)
+  built on the same generic core.
+- **Only 5 `TrainingGoal`s / 4 `MovementPattern`s / 10 `MuscleGroup`s** are
+  modeled (see enum table below) — adding a goal means writing a new
+  `GoalWorkoutStrategy` bean (no other change needed, per the Strategy
+  pattern), but adding a movement pattern or muscle group touches the seed
+  data (V12) and possibly the rule set.
+
+---
+
+## 11. Domain enum reference
+
+| Enum | Values |
+|---|---|
+| `TrainingGoal` | `STRENGTH`, `HYPERTROPHY`, `FAT_LOSS`, `ENDURANCE`, `GENERAL_FITNESS` |
+| `ExperienceLevel` / `DifficultyLevel` | `BEGINNER`, `INTERMEDIATE`, `ADVANCED` (two separate enums, deliberately not compared by ordinal — see §5.3) |
+| `MovementPattern` | `PUSH`, `PULL`, `LEGS`, `CORE`, `FULL_BODY` |
+| `MuscleGroup` | `CHEST`, `BACK`, `SHOULDERS`, `BICEPS`, `TRICEPS`, `QUADRICEPS`, `HAMSTRINGS`, `GLUTES`, `CALVES`, `CORE`, `FULL_BODY` |
+| `ExerciseType` | `COMPOUND`, `ISOLATION` |
+| `Location` | `HOME`, `GYM`, `OUTDOOR`, `ANYWHERE` |
+| `Sex` | `MALE`, `FEMALE` |
+| `GenerationSource` | `RULE_BASED`, `AI` (the latter unused today, see §7) |
+| `MetricType` | `MAX_WEIGHT`, `MAX_REPS` (personal records) |
+| `RoleName` | `ROLE_USER`, `ROLE_ADMIN` |
+
+---
+
+## 12. Quick reference: REST API surface
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| POST | `/api/v1/auth/register` | public | Create account |
+| POST | `/api/v1/auth/login` | public | Get JWT |
+| GET | `/api/v1/users/me` | JWT | Current user id/username/email/roles |
+| GET/PUT | `/api/v1/profile/me` | JWT | Read/replace profile |
+| GET | `/api/v1/exercises`, `/api/v1/exercises/{id}` | public | Catalog browse |
+| POST/PUT | `/api/v1/exercises`, `/api/v1/exercises/{id}` | JWT + ROLE_ADMIN | Catalog write |
+| GET | `/api/v1/equipment` | public | Equipment lookup list |
+| POST | `/api/v1/workout-plans/generate` | JWT | Generate + persist a plan |
+| GET | `/api/v1/workout-plans/active` | JWT | Current active plan |
+| GET | `/api/v1/workout-plans` | JWT | All plans for the user |
+| GET | `/api/v1/workout-plans/{id}` | JWT (owner only) | One plan |
+| POST | `/api/v1/workout-plans/{planId}/sessions/{sessionId}/complete` | JWT | Log a completed session |
+| GET | `/api/v1/me/streak` | JWT | Current/longest streak |
+| GET | `/api/v1/me/personal-records` | JWT | All PRs |
+| GET | `/api/v1/me/workout-history` | JWT | All workout logs |
+
+Browser/Thymeleaf routes: `/`, `/login`, `/register`, `/dashboard`,
+`/profile`, `/progress`, `/exercises`.

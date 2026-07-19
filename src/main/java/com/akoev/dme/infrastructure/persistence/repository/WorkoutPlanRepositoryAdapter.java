@@ -93,6 +93,13 @@ public class WorkoutPlanRepositoryAdapter implements WorkoutPlanRepository {
 
     @Override
     public Optional<WorkoutPlan> findActiveByUserId(Long userId) {
-        return workoutPlanJpaRepository.findFirstByUser_IdAndActiveTrue(userId).map(workoutPlanMapper::toDomain);
+        return workoutPlanJpaRepository.findFirstByUser_IdAndActiveTrueOrderByGeneratedAtDesc(userId)
+                .map(workoutPlanMapper::toDomain);
+    }
+
+    @Override
+    @Transactional
+    public void deactivateAllForUser(Long userId) {
+        workoutPlanJpaRepository.deactivateAllForUser(userId);
     }
 }

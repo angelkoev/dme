@@ -2,6 +2,7 @@ package com.akoev.dme.web.mvc;
 
 import com.akoev.dme.application.service.CompleteSessionCommand;
 import com.akoev.dme.application.service.WorkoutPlanService;
+import com.akoev.dme.domain.model.TrainingGoal;
 import com.akoev.dme.domain.repository.WorkoutStreakRepository;
 import com.akoev.dme.infrastructure.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
@@ -31,12 +32,19 @@ public class DashboardController {
             model.addAttribute("noPlan", true);
         }
         workoutStreakRepository.findByUserId(principal.getId()).ifPresent(streak -> model.addAttribute("streak", streak));
+        model.addAttribute("trainingGoals", TrainingGoal.values());
         return "dashboard";
     }
 
     @PostMapping("/dashboard/generate")
-    public String generate(@AuthenticationPrincipal CustomUserDetails principal) {
-        workoutPlanService.generate(principal.getId(), null);
+    public String generate(@AuthenticationPrincipal CustomUserDetails principal,
+                            @RequestParam(required = false) String goalOverride) {
+        // Bound as a raw String, not TrainingGoal: unlike bean-property binding
+        // (e.g. ProfileForm), @RequestParam's ConversionService has no
+        // empty-string-is-null special case, so an unset <select> (value="")
+        // would otherwise fail enum conversion instead of meaning "no override".
+        TrainingGoal goal = (goalOverride == null || goalOverride.isBlank()) ? null : TrainingGoal.valueOf(goalOverride);
+        workoutPlanService.generate(principal.getId(), goal);
         return "redirect:/dashboard";
     }
 

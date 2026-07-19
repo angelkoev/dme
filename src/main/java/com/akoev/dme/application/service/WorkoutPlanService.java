@@ -51,6 +51,11 @@ public class WorkoutPlanService {
     @Transactional
     public GenerationResult generate(Long userId, TrainingGoal goalOverride) {
         WorkoutPlan generated = workoutPlanGenerator.generate(new GenerationRequest(userId, goalOverride));
+        // A freshly generated plan is always active=true (see
+        // RuleBasedWorkoutPlanGenerator.generate()); without retiring whatever
+        // was active before it, repeated generation leaves multiple plans
+        // marked active and findActiveByUserId has to guess which one is "the" plan.
+        workoutPlanRepository.deactivateAllForUser(userId);
         WorkoutPlan saved = workoutPlanRepository.save(generated);
 
         User user = userRepository.findById(userId)

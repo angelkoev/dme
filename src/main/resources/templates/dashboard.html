@@ -18,6 +18,11 @@
 </div>
 
 <form th:action="@{/dashboard/generate}" method="post">
+    <label for="goalOverride">Goal for this plan:</label>
+    <select id="goalOverride" name="goalOverride">
+        <option value="">Use my profile's goal</option>
+        <option th:each="goal : ${trainingGoals}" th:value="${goal}" th:text="${goal}"></option>
+    </select>
     <button type="submit">Generate a new workout plan</button>
 </form>
 

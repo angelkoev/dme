@@ -11,6 +11,7 @@
     <span th:if="${username}"> | <a th:href="@{/profile}">My Profile</a></span>
     <span th:if="${username}"> | <a th:href="@{/dashboard}">My Dashboard</a></span>
     <span th:if="${username}"> | <a th:href="@{/progress}">My Progress</a></span>
+    <span th:if="${isAdmin}"> | <a th:href="@{/admin/exercises}">Manage Exercises (Admin)</a></span>
 </nav>
 <div th:if="${username}">
     <p>Logged in as <strong th:text="${username}"></strong>.</p>

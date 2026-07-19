@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Manage Exercises — DME</title>
+</head>
+<body>
+<p><a th:href="@{/}">← Home</a></p>
+<h1>Manage Exercises</h1>
+
+<p th:if="${exerciseSaved}"><strong>Exercise saved.</strong></p>
+
+<p><a th:href="@{/admin/exercises/new}">+ New exercise</a></p>
+
+<table border="1" cellpadding="6">
+    <thead>
+    <tr>
+        <th>Name</th>
+        <th>Muscle Group</th>
+        <th>Movement</th>
+        <th>Level</th>
+        <th>Type</th>
+        <th>Equipment</th>
+        <th></th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="exercise : ${exercises}">
+        <td th:text="${exercise.name}"></td>
+        <td th:text="${exercise.primaryMuscleGroup}"></td>
+        <td th:text="${exercise.movementPattern}"></td>
+        <td th:text="${exercise.difficultyLevel}"></td>
+        <td th:text="${exercise.exerciseType}"></td>
+        <td th:text="${#strings.listJoin(exercise.requiredEquipment.![name], ', ')}"></td>
+        <td><a th:href="@{'/admin/exercises/' + ${exercise.id} + '/edit'}">Edit</a></td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>

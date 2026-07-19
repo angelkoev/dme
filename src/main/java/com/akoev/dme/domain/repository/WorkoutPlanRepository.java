@@ -14,4 +14,6 @@ public interface WorkoutPlanRepository {
     List<WorkoutPlan> findAllByUserId(Long userId);
 
     Optional<WorkoutPlan> findActiveByUserId(Long userId);
+
+    void deactivateAllForUser(Long userId);
 }

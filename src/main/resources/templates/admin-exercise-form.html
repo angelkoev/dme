@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Exercise — DME Admin</title>
+</head>
+<body>
+<p><a th:href="@{/admin/exercises}">← Manage Exercises</a></p>
+<h1 th:text="${isNew} ? 'New Exercise' : 'Edit Exercise'"></h1>
+
+<form th:object="${exerciseForm}"
+      th:action="${isNew} ? @{/admin/exercises/new} : @{'/admin/exercises/' + ${exerciseId} + '/edit'}"
+      method="post">
+
+    <div>
+        <label for="name">Name</label>
+        <input id="name" type="text" th:field="*{name}" required="required"/>
+        <p th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></p>
+    </div>
+
+    <div>
+        <label for="description">Description</label><br/>
+        <textarea id="description" rows="2" cols="50" th:field="*{description}"></textarea>
+    </div>
+
+    <div>
+        <label for="primaryMuscleGroup">Primary muscle group</label>
+        <select id="primaryMuscleGroup" th:field="*{primaryMuscleGroup}" required="required">
+            <option th:each="mg : ${muscleGroups}" th:value="${mg}" th:text="${mg}"></option>
+        </select>
+        <p th:if="${#fields.hasErrors('primaryMuscleGroup')}" th:errors="*{primaryMuscleGroup}"></p>
+    </div>
+
+    <div>
+        <label for="movementPattern">Movement pattern</label>
+        <select id="movementPattern" th:field="*{movementPattern}" required="required">
+            <option th:each="mp : ${movementPatterns}" th:value="${mp}" th:text="${mp}"></option>
+        </select>
+        <p th:if="${#fields.hasErrors('movementPattern')}" th:errors="*{movementPattern}"></p>
+    </div>
+
+    <div>
+        <label for="difficultyLevel">Difficulty level</label>
+        <select id="difficultyLevel" th:field="*{difficultyLevel}" required="required">
+            <option th:each="level : ${difficultyLevels}" th:value="${level}" th:text="${level}"></option>
+        </select>
+        <p th:if="${#fields.hasErrors('difficultyLevel')}" th:errors="*{difficultyLevel}"></p>
+    </div>
+
+    <div>
+        <label for="exerciseType">Exercise type</label>
+        <select id="exerciseType" th:field="*{exerciseType}" required="required">
+            <option th:each="type : ${exerciseTypes}" th:value="${type}" th:text="${type}"></option>
+        </select>
+        <p th:if="${#fields.hasErrors('exerciseType')}" th:errors="*{exerciseType}"></p>
+    </div>
+
+    <div>
+        <label for="instructions">Instructions</label><br/>
+        <textarea id="instructions" rows="3" cols="50" th:field="*{instructions}"></textarea>
+    </div>
+
+    <div>
+        <label for="videoUrl">Video URL</label>
+        <input id="videoUrl" type="text" th:field="*{videoUrl}" size="50"/>
+    </div>
+
+    <fieldset>
+        <legend>Required equipment</legend>
+        <label th:each="equipment : ${allEquipment}" style="margin-right: 1em;">
+            <input type="checkbox" th:field="*{equipmentIds}" th:value="${equipment.id}"/>
+            <span th:text="${equipment.name}"></span>
+        </label>
+    </fieldset>
+
+    <button type="submit">Save exercise</button>
+</form>
+</body>
+</html>
