@@ -24,6 +24,11 @@ Spring Boot, Spring Security, Spring Data JPA, REST + MVC, database design,
 clean/hexagonal architecture and classic design patterns using a real,
 non-trivial domain problem — one designed from the start to generalize.
 
+**Development note**: this project was built mainly with AI (Claude Code)
+— the user directed the work through prompts rather than writing the
+implementation by hand. Visible in `git log` via `Co-Authored-By: Claude
+Sonnet 5` trailers on many commits.
+
 ## Table of contents
 
 - [Architecture](#architecture)
