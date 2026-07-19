@@ -50,6 +50,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/exercises/**", "/api/v1/equipment/**").permitAll()
+                        // The five basic domains (finance/meals/movies/learning/productivity)
+                        // are entirely public: nothing is persisted per-user, so there's no
+                        // account to protect — same reasoning as the fitness catalog's
+                        // public GETs, just extended to their only endpoints.
+                        .requestMatchers("/api/v1/finance/**", "/api/v1/meals/**", "/api/v1/movies/**",
+                                "/api/v1/learning/**", "/api/v1/productivity/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(restAuthenticationEntryPoint)
@@ -67,6 +73,8 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/help", "/login", "/register", "/exercises", "/exercises/**", "/css/**", "/js/**").permitAll()
+                        .requestMatchers("/finance", "/finance/**", "/meals", "/meals/**", "/movies", "/movies/**",
+                                "/learning", "/learning/**", "/tasks", "/tasks/**").permitAll()
                         // Unauthenticated on purpose: cloud platforms (container orchestrators,
                         // PaaS health checks) probe this before any credentials exist. Only
                         // "health" is exposed over web (management.endpoints.web.exposure.include

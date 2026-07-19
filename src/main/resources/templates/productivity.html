@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Daily Task Prioritizer — DME</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body>
+<p><a th:href="@{/}">← Home</a></p>
+<h1>Daily Task Prioritizer</h1>
+<p class="hint">The odd one out of the five: this ranks tasks <em>you</em>
+    type in below, not a fixed catalog — same engine, applied to your own
+    list instead of a seeded pool.</p>
+
+<form th:action="@{/tasks/prioritize}" method="post">
+    <div>
+        <label for="availableMinutesToday">Minutes available today</label>
+        <input id="availableMinutesToday" type="number" name="availableMinutesToday" min="0" value="120"/>
+    </div>
+    <div>
+        <label for="energyLevel">Energy level right now</label>
+        <select id="energyLevel" name="energyLevel">
+            <option th:each="level : ${energyLevels}" th:value="${level}" th:text="${level}"></option>
+        </select>
+    </div>
+
+    <fieldset>
+        <legend>Your tasks (leave the name blank to skip a row)</legend>
+        <div th:each="i : ${rowIndexes}">
+            <input type="text" name="taskName" placeholder="Task name" size="30"/>
+            <select name="taskUrgency">
+                <option th:each="u : ${urgencies}" th:value="${u}" th:text="'Urgency: ' + ${u}"></option>
+            </select>
+            <select name="taskImportance">
+                <option th:each="imp : ${importances}" th:value="${imp}" th:text="'Importance: ' + ${imp}"></option>
+            </select>
+            <input type="number" name="taskMinutes" min="1" value="30" title="Estimated minutes"/>
+        </div>
+    </fieldset>
+
+    <button type="submit">Prioritize</button>
+</form>
+
+<div th:if="${prioritized != null}" class="card">
+    <h2>Your prioritized list</h2>
+    <table th:if="${not #lists.isEmpty(prioritized)}">
+        <thead>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Urgency</th>
+            <th>Importance</th>
+            <th>Minutes</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="task, iter : ${prioritized}">
+            <td th:text="${iter.count}"></td>
+            <td th:text="${task.name}"></td>
+            <td th:text="${task.urgency}"></td>
+            <td th:text="${task.importance}"></td>
+            <td th:text="${task.estimatedMinutes}"></td>
+        </tr>
+        </tbody>
+    </table>
+    <p th:if="${#lists.isEmpty(prioritized)}" class="hint">No task fit in the available time today (or none were entered).</p>
+</div>
+</body>
+</html>

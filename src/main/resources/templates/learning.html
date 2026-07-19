@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Learning Path — DME</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body>
+<p><a th:href="@{/}">← Home</a></p>
+<h1>Learning Path</h1>
+<p class="hint">Course picks for a skill area, capped one level above where
+    you are today — no prerequisite chain yet, just a flat level rule.</p>
+
+<form th:action="@{/learning/recommend}" method="post">
+    <div>
+        <label for="targetSkillArea">Skill area</label>
+        <select id="targetSkillArea" name="targetSkillArea" required="required">
+            <option th:each="area : ${skillAreas}" th:value="${area}" th:text="${area}"></option>
+        </select>
+    </div>
+    <div>
+        <label for="currentLevel">Your current level</label>
+        <select id="currentLevel" name="currentLevel" required="required">
+            <option th:each="level : ${skillLevels}" th:value="${level}" th:text="${level}"></option>
+        </select>
+    </div>
+    <button type="submit">Get course picks</button>
+</form>
+
+<div th:if="${recommendations}" class="card">
+    <h2>Recommended courses</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Skill Area</th>
+            <th>Level</th>
+            <th>Duration (hrs)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="course : ${recommendations}">
+            <td th:text="${course.name}"></td>
+            <td th:text="${course.skillArea}"></td>
+            <td th:text="${course.level}"></td>
+            <td th:text="${course.durationHours}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<h2>Full catalog</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Name</th>
+        <th>Skill Area</th>
+        <th>Level</th>
+        <th>Duration (hrs)</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="course : ${courses}">
+        <td th:text="${course.name}"></td>
+        <td th:text="${course.skillArea}"></td>
+        <td th:text="${course.level}"></td>
+        <td th:text="${course.durationHours}"></td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>

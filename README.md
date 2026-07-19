@@ -3,19 +3,24 @@
 A Spring Boot learning project built around a generic, domain-agnostic
 **Decision Engine** (`decisionengine` — rule filtering + weighted scoring +
 ranking, with zero knowledge of any specific domain) — in other words, a
-small **Decision Engine Framework**, not a single-purpose app. A **Workout
-Planner** module plugs into it as the first application. The generic flow
-is always the same regardless of domain — context in, hard rules filter, a
-scoring strategy ranks, feedback from history adapts the next round — see
-[The Decision Engine](#the-decision-engine) for how workout planning
-instantiates it, and the home page for where a second domain (finance, meal
-planning, ...) would plug in next.
+small **Decision Engine Framework**, not a single-purpose app. Six domains
+plug into it today: **Workout Planner** is the deep one (persisted profile,
+history-driven adaptation); **Portfolio Advisor**, **Meal Planner**,
+**Movie & Show Picks**, **Learning Path**, and **Daily Task Prioritizer**
+are deliberately thin proofs that the same core generalizes — no account,
+no persistence, just rules + scoring computed on the spot (see [Other
+domains](#other-domains)). The generic flow is always the same regardless
+of domain — context in, hard rules filter, a scoring strategy ranks,
+(optionally) feedback from history adapts the next round — see [The
+Decision Engine](#the-decision-engine) for how workout planning instantiates
+it most fully.
 
 This is not a list-of-exercises app, and fitness is not the point — it's the
 first domain proving the engine is real, not aspirational (there's a unit
 test in `decisionengine` that exercises the core with made-up types
-unrelated to fitness). The point of the project is to practice Spring Boot,
-Spring Security, Spring Data JPA, REST + MVC, database design,
+unrelated to fitness, and five more domains besides fitness now prove it at
+the whole-application level). The point of the project is to practice
+Spring Boot, Spring Security, Spring Data JPA, REST + MVC, database design,
 clean/hexagonal architecture and classic design patterns using a real,
 non-trivial domain problem — one designed from the start to generalize.
 
@@ -25,6 +30,7 @@ non-trivial domain problem — one designed from the start to generalize.
 - [Database schema](#database-schema)
 - [Security model](#security-model)
 - [The Decision Engine](#the-decision-engine)
+- [Other domains](#other-domains)
 - [User journey](#user-journey)
 - [Web UI](#web-ui)
 - [Running locally](#running-locally)
@@ -67,6 +73,14 @@ com.akoev.dme
 │   │   └── scoring/   (FitnessExerciseScorer)
 │   └── assist/                              # AI-ready seam (see below)
 │
+├── finance/ meals/ movies/ learning/ productivity/
+│   │                        # Five thin sibling domains (Portfolio Advisor,
+│   │                        # Meal Planner, Movie & Show Picks, Learning Path,
+│   │                        # Daily Task Prioritizer) — see Other domains below.
+│   │                        # No rulebased/assist/strategy subpackages: each is
+│   │                        # small enough to keep its Context/Candidate/Rule(s)/
+│   │                        # Scorer/Service flat in one package.
+│
 ├── domain/
 │   ├── model/               # Framework-agnostic domain model (User, UserProfile,
 │   │                        # Exercise, WorkoutPlan, WorkoutLog, PersonalRecord, ...)
@@ -103,10 +117,11 @@ a candidate list through `Rule<C, T>`s (AND semantics — Chain of
 Responsibility / Specification), scores the survivors with a
 `ScoringStrategy<C, T>`, and returns them ranked. The fitness module
 "instantiates" this core with `C = FitnessDecisionContext`, `T = Exercise`.
-A second decision domain (nutrition, rehab programming, ...) could reuse
-`decisionengine` unchanged by supplying its own context/candidate types and
-rule/scoring implementations — the module boundary is real, not aspirational
-(there's a unit test in `decisionengine` that exercises the engine with
+Five more domains (`finance`, `meals`, `movies`, `learning`, `productivity` —
+see [Other domains](#other-domains)) reuse `decisionengine` unchanged today,
+each supplying only its own context/candidate types and rule/scoring
+implementations — the module boundary is real, not aspirational (there's
+also a unit test in `decisionengine` itself that exercises the engine with
 made-up types that have nothing to do with fitness).
 
 ### Design patterns in play
@@ -164,14 +179,20 @@ Two independent `SecurityFilterChain` beans (`infrastructure.security.SecurityCo
 
 - **`/api/**`** (`@Order(1)`) — stateless, JWT bearer auth (`jwt/JwtAuthFilter`
   + `jwt/JwtService`, HS256 via `jjwt`), CSRF disabled, JSON 401/403 via
-  `RestAuthenticationEntryPoint` / `RestAccessDeniedHandler`.
+  `RestAuthenticationEntryPoint` / `RestAccessDeniedHandler`. The five basic
+  domains' endpoints (`/api/v1/finance/**`, `/meals/**`, `/movies/**`,
+  `/learning/**`, `/productivity/**`) are `permitAll()` — nothing they do is
+  persisted per-user, so there's no account to protect.
 - **Everything else** (`@Order(2)`) — session-based form login for the
   Thymeleaf pages (`/login`, `/dashboard`, `/profile`, `/progress`, `/account/**`),
   CSRF enabled (Spring's Thymeleaf integration injects the token into
   `th:action` forms automatically). `/admin/**` additionally requires
-  `hasRole("ADMIN")`, and `/actuator/health` is `permitAll()` (cloud platforms
+  `hasRole("ADMIN")`, `/actuator/health` is `permitAll()` (cloud platforms
   probe it before any credentials exist; Spring Boot's default web exposure
-  keeps every other actuator endpoint unregistered regardless).
+  keeps every other actuator endpoint unregistered regardless), and the five
+  basic domains' pages (`/finance`, `/meals`, `/movies`, `/learning`,
+  `/tasks`, all `/**`) are `permitAll()` for the same no-account-needed
+  reason as their API endpoints.
 
 Both chains share `CustomUserDetailsService` (backed by the domain
 `UserRepository` port, not JPA directly) and a `BCryptPasswordEncoder`.
@@ -273,6 +294,46 @@ easy") adds a set and trims rest. This is separate from — and complements —
 the difficulty-tier nudge in the scoring table above, which only affects
 *which* exercises get picked, not how much work is prescribed.
 
+## Other domains
+
+Five more domains plug into the exact same `decisionengine` (`Rule`,
+`ScoringStrategy`, `RuleBasedDecisionEngine`) with their own context/candidate
+types — proof the core generalizes beyond fitness, kept deliberately thin
+rather than built out to fitness's depth:
+
+| Domain | Package | Candidate catalog | Rules | What's different |
+|---|---|---|---|---|
+| Portfolio Advisor | `finance` | 12 instruments, in-memory | Risk tolerance cap, excluded sector | Numeric scoring (expected return, weighted by risk appetite) |
+| Meal Planner | `meals` | 12 meals, in-memory | Allergen exclusion, meal-type slot match | Builds a 4-slot daily plan (breakfast/lunch/dinner/snack), excluding meals already used — the same "one engine call per slot, no repeats" shape as a workout session |
+| Movie & Show Picks | `movies` | 15 titles, in-memory | Excluded genre, fits available time | The simplest of the five — one rule for taste, one for a hard time budget |
+| Learning Path | `learning` | 15 courses, in-memory | Skill area match, level cap (current + 1) | The one domain shaped for a future `DecisionTreeStrategy` (prerequisite chains) — deliberately not built that way yet, see below |
+| Daily Task Prioritizer | `productivity` | **none — no catalog** | Fits available time today | The odd one out: ranks tasks the caller submits in the request itself, not a fixed pool — proves the engine works for "rank the user's own items," not just "pick from a catalog" |
+
+**What's deliberately not here, compared to fitness**: no persisted
+profile (context comes from the request/form directly), no history table,
+no adaptive feedback loop, no admin catalog management, no `assist`/AI seam,
+no multi-session weekly planning. Catalogs are plain in-memory `List`s in a
+`@Component` (e.g. `InstrumentCatalog`), not Flyway-migrated tables — there's
+no admin-editing or historical-reference need to justify a database table
+the way fitness's `exercises` table has. Each domain's REST controller binds
+its own `Context`/candidate records directly as the request/response body
+(no separate web DTO layer) since, unlike `UserProfile`, none of them is a
+persisted entity the web layer needs decoupling from.
+
+All five are public (`permitAll`) on both `/api/v1/<domain>/**` and their
+`/<domain>` web page — nothing is saved per-user, so there's no account to
+protect. Try one: `POST /api/v1/finance/recommend`
+`{"riskTolerance":"AGGRESSIVE","excludedSectors":["TECHNOLOGY"]}`, or just
+open `/finance`, `/meals`, `/movies`, `/learning`, or `/tasks`.
+
+**On `DecisionTreeStrategy`**: Learning Path's "skill area + level cap" rule
+is the flat, simple version of what would ideally be a prerequisite chain
+(e.g. "Statistical Modeling requires Intro to Data Analysis"). That's the
+one place among all six domains where a decision-tree-shaped strategy might
+eventually earn its keep — but it wasn't built speculatively; the flat rule
+ships today, and a real prerequisite graph is a concrete next step if this
+domain gets built out further, not before.
+
 ## User journey
 
 1. **Register** (`POST /api/v1/auth/register` for API clients, or the
@@ -308,7 +369,7 @@ Every capability above is reachable from the browser, not just the REST API:
 
 | Page | Who | What it does |
 |---|---|---|
-| `/` | anyone | Domain card grid — "Workout Planner" (live, with the nav below embedded in its card) plus placeholder cards for domains not built yet (`HomeController`'s `DecisionDomainCard` list) |
+| `/` | anyone | Domain card grid — "Workout Planner" (live, with the nav below embedded in its card) plus one card per other domain, linking straight in now that all six are live (`HomeController`'s `DecisionDomainCard` list) |
 | `/register`, `/login` | anyone | Session-based signup/login (separate from the JWT flow) |
 | `/profile` | any logged-in user | Full create/edit form for the profile: scalars, enums, and checkbox groups for equipment/categories/rest-days/exercises, plus a small set of indexed rows for injury limitations (`web.mvc.form.ProfileForm`) |
 | `/dashboard` | any logged-in user | Generate a plan (with an optional goal-override dropdown), view the active plan, mark a session complete |
@@ -317,6 +378,7 @@ Every capability above is reachable from the browser, not just the REST API:
 | `/exercises` | anyone | Read-only catalog browse |
 | `/account/password` | any logged-in user | Change password (verifies the current one first) |
 | `/admin/exercises`, `/admin/exercises/new`, `/admin/exercises/{id}/edit` | `ROLE_ADMIN` | Create/edit the exercise catalog (`web.mvc.form.ExerciseForm`) |
+| `/finance`, `/meals`, `/movies`, `/learning`, `/tasks` | anyone | The five basic domains — see [Other domains](#other-domains) |
 
 Every one of these pages is backed by the exact same application-service
 methods the REST controllers call — there's no separate "web" business logic
@@ -424,11 +486,12 @@ accounts](#test-accounts)).
 | v0.5 | Generic Decision Engine core + fitness rule-based engine + AI-ready seam (M4) |
 | v0.6 | Workout plan generate/view API + dashboard, closing the feedback loop (M5) — **MVP complete here** |
 | v0.7 | Basic gamification surfacing: streaks, personal records, progress view (M6) |
-| **v0.8+** | *Not built yet, described only:* full gamification (achievements/badges catalog, levels, weekly/monthly goals dashboard, charts), a real AI-backed implementation of the `AmbiguityResolver`/`WorkoutExplanationService`/`MotivationalMessageService` ports, and — as a demonstration that `decisionengine` is genuinely reusable — a second decision domain (e.g. nutrition) built on the same core. |
+| **v0.8+** | *Not built yet, described only:* full gamification (achievements/badges catalog, levels, weekly/monthly goals dashboard, charts) and a real AI-backed implementation of the `AmbiguityResolver`/`WorkoutExplanationService`/`MotivationalMessageService` ports. (The other planned v0.8+ item — a second decision domain proving `decisionengine` is genuinely reusable — shipped early and then some: see v1.4.) |
 | v1.0 | Polish: this README, expanded exception handling and validation, final test pass (M7) |
 | v1.1 | Web parity with the API: `/profile` create/edit form, dashboard goal-override, `/admin/exercises` catalog editor, `/account/password`. Fixed a bug where regenerating a plan never deactivated the previous one. Added cloud-hosting basics: `Dockerfile`, `application-prod.yml`, `/actuator/health`, and dev-only seeded test accounts. |
 | v1.2 | Multi-domain home page (`/help` plus a "coming soon" card grid — fitness is domain #1 of what's meant to be several, see [Architecture](#architecture)). Fixed the `/dashboard/generate` and session-complete actions leaking an unhandled error page on expected failures. Closed several rule-engine gaps where profile data was captured but never used: rest days now drive real weekday scheduling, session length now trims (not pads) exercise slots, and completion %/perceived intensity now adjust the actual prescribed sets/rest ("too easy"/"too hard"), not just which difficulty tier gets picked. Added a "weak muscle group" scoring bonus. |
-| v1.3 | Clarified in the docs (name unchanged — still DME, Decision Making Engine) that this is architected as a general decision engine framework rather than a fitness app with a generic core bolted on — the distinction was already true in the code, just not said plainly. Added a 4th "coming soon" domain (Learning Path). No architecture change: evaluated and declined collapsing `Rule`/`ScoringStrategy` into one monolithic `DecisionStrategy` interface, since the current split is independently composable and a unified interface would be a regression, not a simplification. |
+| v1.3 | Clarified in the docs (name unchanged — still DME, Decision Making Engine) that this is architected as a general decision engine framework rather than a fitness app with a generic core bolted on — the distinction was already true in the code, just not said plainly. Added a 4th "coming soon" domain (Learning Path), then a 5th (Daily Task Prioritizer). No architecture change: evaluated and declined collapsing `Rule`/`ScoringStrategy` into one monolithic `DecisionStrategy` interface, since the current split is independently composable and a unified interface would be a regression, not a simplification. |
+| v1.4 | Built all five "coming soon" domains as real, deliberately thin applications of `decisionengine` (Portfolio Advisor, Meal Planner, Movie & Show Picks, Learning Path, Daily Task Prioritizer) — see [Other domains](#other-domains). Each is public, has no persisted profile/history, and uses an in-memory catalog (or, for the task prioritizer, no catalog at all — it ranks caller-submitted items). The home page's domain cards all link live now instead of showing "coming soon." |
 
 ## Future AI integration
 

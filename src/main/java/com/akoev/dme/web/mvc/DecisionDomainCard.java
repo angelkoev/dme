@@ -1,17 +1,26 @@
 package com.akoev.dme.web.mvc;
 
 /**
- * A placeholder entry for a decision domain not built yet (see the "Coming
- * soon" grid on the home page). The one domain that IS built —
- * fitness/workout planning — is intentionally not modeled as one of these;
- * its home-page card renders its actual nav links directly (home.html),
- * since unlike a placeholder it has real routes to link to.
+ * One card in the home page's domain grid. {@code url == null} means "not
+ * built yet" (rendered with a "Coming soon" badge, no link); otherwise it's
+ * a live domain and the card links straight to its page. Workout Planner is
+ * the one exception — its card renders its full nav directly in home.html
+ * rather than a single link, since it has several pages, not one.
  * <p>
  * {@code decisionengine} (Rule/ScoringStrategy/RuleBasedDecisionEngine) has
- * zero fitness-specific code, so any of these could plug into it the same
- * way {@code fitness.engine} does, with its own context/candidate types and
- * rules/scoring — see the "fitness" package for the shape a new one would
- * follow.
+ * zero fitness-specific code, so any of these plug in the same way
+ * {@code fitness.engine} does, with their own context/candidate types and
+ * rules/scoring — see the {@code finance}/{@code meals}/{@code movies}/
+ * {@code learning}/{@code productivity} packages for the (deliberately
+ * thin) shape each one follows.
  */
-public record DecisionDomainCard(String name, String description) {
+public record DecisionDomainCard(String name, String description, String url) {
+
+    public DecisionDomainCard(String name, String description) {
+        this(name, description, null);
+    }
+
+    public boolean isLive() {
+        return url != null;
+    }
 }

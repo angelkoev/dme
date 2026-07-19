@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Portfolio Advisor — DME</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body>
+<p><a th:href="@{/}">← Home</a></p>
+<h1>Portfolio Advisor</h1>
+<p class="hint">A thin second domain on the same decision engine that powers the
+    Workout Planner — no account or history needed, just tell it your risk
+    tolerance.</p>
+
+<form th:action="@{/finance/recommend}" method="post">
+    <div>
+        <label for="riskTolerance">Risk tolerance</label>
+        <select id="riskTolerance" name="riskTolerance" required="required">
+            <option th:each="rt : ${riskTolerances}" th:value="${rt}" th:text="${rt}"
+                    th:selected="${rt == selectedRiskTolerance}"></option>
+        </select>
+    </div>
+    <fieldset>
+        <legend>Exclude sectors</legend>
+        <label th:each="sector : ${sectors}">
+            <input type="checkbox" name="excludedSectors" th:value="${sector}"/>
+            <span th:text="${sector}"></span>
+        </label>
+    </fieldset>
+    <button type="submit">Get recommendations</button>
+</form>
+
+<div th:if="${recommendations}" class="card">
+    <h2>Suggested picks</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Asset Class</th>
+            <th>Risk</th>
+            <th>Sector</th>
+            <th>Expected Return</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="instrument : ${recommendations}">
+            <td th:text="${instrument.name}"></td>
+            <td th:text="${instrument.assetClass}"></td>
+            <td th:text="${instrument.riskLevel}"></td>
+            <td th:text="${instrument.sector}"></td>
+            <td th:text="${instrument.expectedReturnPercent} + '%'"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<h2>Full catalog</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Name</th>
+        <th>Asset Class</th>
+        <th>Risk</th>
+        <th>Sector</th>
+        <th>Expected Return</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="instrument : ${instruments}">
+        <td th:text="${instrument.name}"></td>
+        <td th:text="${instrument.assetClass}"></td>
+        <td th:text="${instrument.riskLevel}"></td>
+        <td th:text="${instrument.sector}"></td>
+        <td th:text="${instrument.expectedReturnPercent} + '%'"></td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>

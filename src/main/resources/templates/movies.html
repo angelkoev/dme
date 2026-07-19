@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Movie &amp; Show Picks — DME</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body>
+<p><a th:href="@{/}">← Home</a></p>
+<h1>Movie &amp; Show Picks</h1>
+<p class="hint">The simplest domain here on purpose — just genre preference
+    and a time budget, no account needed.</p>
+
+<form th:action="@{/movies/recommend}" method="post">
+    <div>
+        <label for="maxDurationMinutes">Available time (minutes)</label>
+        <input id="maxDurationMinutes" type="number" name="maxDurationMinutes" min="30" value="180"/>
+    </div>
+    <fieldset>
+        <legend>Preferred genres</legend>
+        <label th:each="genre : ${genres}">
+            <input type="checkbox" name="preferredGenres" th:value="${genre}"/>
+            <span th:text="${genre}"></span>
+        </label>
+    </fieldset>
+    <fieldset>
+        <legend>Exclude genres</legend>
+        <label th:each="genre : ${genres}">
+            <input type="checkbox" name="excludedGenres" th:value="${genre}"/>
+            <span th:text="${genre}"></span>
+        </label>
+    </fieldset>
+    <button type="submit">Get picks</button>
+</form>
+
+<div th:if="${recommendations}" class="card">
+    <h2>Picks for you</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Title</th>
+            <th>Genre</th>
+            <th>Duration (min)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="title : ${recommendations}">
+            <td th:text="${title.name}"></td>
+            <td th:text="${title.genre}"></td>
+            <td th:text="${title.durationMinutes}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<h2>Full catalog</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Title</th>
+        <th>Genre</th>
+        <th>Duration (min)</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="title : ${titles}">
+        <td th:text="${title.name}"></td>
+        <td th:text="${title.genre}"></td>
+        <td th:text="${title.durationMinutes}"></td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>

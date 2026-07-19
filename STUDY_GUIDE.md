@@ -35,6 +35,10 @@ exists to support exercising that engine end-to-end.
   + Testcontainers for tests. See `pom.xml`.
 - **Every capability exists both as a REST endpoint and as a browser page**
   backed by the same application-service method — see §13.
+- **Five more domains** (`finance`, `meals`, `movies`, `learning`,
+  `productivity`) plug into the exact same `decisionengine` fitness uses,
+  each deliberately thin (no persistence, no adaptive history) rather than
+  built out to fitness's depth — see §16.
 
 ---
 
@@ -82,6 +86,7 @@ only on `domain.repository` interfaces (Dependency Inversion).
 | `fitness.engine` | Fitness plugs into the generic core: `FitnessDecisionContext` (the `C`), `Exercise` (the `T`, from `domain.model`), `RecentActivitySummary`(`Builder`), the `WorkoutPlanGenerator` port, `GenerationRequest`. |
 | `fitness.engine.rulebased` | v1 (only) implementation: `RuleBasedWorkoutPlanGenerator`, `rules/` (6 hard filters), `scoring/FitnessExerciseScorer`, `strategy/` (5 `GoalWorkoutStrategy` + `GoalStrategyResolver`). |
 | `fitness.engine.assist` | The AI-ready seam: `AmbiguityResolver`, `WorkoutExplanationService`, `MotivationalMessageService` interfaces + template (non-AI) default impls. |
+| `finance`, `meals`, `movies`, `learning`, `productivity` | Five thin sibling domains, each flat (no `rulebased`/`assist`/`strategy` subpackages — small enough not to need them): a `Context` record (`C`), a candidate record (`T`), 1-2 `Rule<C,T>`s, one `ScoringStrategy<C,T>`, a `@Component` in-memory catalog (all but `productivity`, which has none — see §16), and a `@Service` wrapping `RuleBasedDecisionEngine`. See §16. |
 | `domain.model` | Plain domain objects: `User`, `UserProfile`, `Exercise`, `WorkoutPlan`, `WorkoutSession`, `SessionExercise`, `WorkoutLog`, `PersonalRecord`, `WorkoutStreak`, `Equipment`, `Role`, plus enums. |
 | `domain.repository` | Port interfaces only (`UserRepository`, `ExerciseRepository`, `WorkoutPlanRepository`, etc.). |
 | `application.service` | Use-case orchestration: `AuthService`, `UserProfileService`, `ExerciseService`, `WorkoutPlanService`. Also holds `*Command`/`*Result` records — the internal request/response shapes between web and service layers. |
@@ -198,6 +203,10 @@ Two independent `SecurityFilterChain` beans in `infrastructure/security/Security
   `/actuator/beans`, ...) is unregistered (404) regardless of auth — verified
   by hand: authenticated requests to those paths still 404, only
   `/actuator` (the HAL discovery page) and `/actuator/health` resolve.
+- `/finance`, `/meals`, `/movies`, `/learning`, `/tasks` (and their `/**`)
+  are `permitAll()` too, mirroring the identical rule added to the API chain
+  for `/api/v1/finance/**` etc. (§16) — none of these five domains persists
+  anything per-user, so there's no account boundary to enforce.
 - Standard `formLogin()` targeting `/login`, redirecting to `/` on success;
   standard `logout()`.
 - CSRF is **enabled** here (unlike the API chain) — Thymeleaf's Spring
@@ -839,10 +848,20 @@ small — worth knowing before you extend anything:
 | GET | `/api/v1/me/personal-records` | JWT | All PRs |
 | GET | `/api/v1/me/workout-history` | JWT | All workout logs |
 | PUT | `/api/v1/account/password` | JWT | Change password |
+| GET | `/api/v1/finance/instruments` | public | Finance catalog |
+| POST | `/api/v1/finance/recommend` | public | `FinanceContext` in, ranked `Instrument`s out |
+| GET | `/api/v1/meals` | public | Meal catalog |
+| POST | `/api/v1/meals/plan` | public | `{dietGoal, allergies}` in, a 4-slot daily plan out |
+| GET | `/api/v1/movies` | public | Title catalog |
+| POST | `/api/v1/movies/recommend` | public | `MovieContext` in, ranked `Title`s out |
+| GET | `/api/v1/learning/courses` | public | Course catalog |
+| POST | `/api/v1/learning/recommend` | public | `LearningContext` in, ranked `Course`s out |
+| POST | `/api/v1/productivity/prioritize` | public | `{availableMinutesToday, energyLevel, tasks[]}` in, the *same* tasks ranked out — no catalog, see §16 |
 
 Browser/Thymeleaf routes: `/`, `/login`, `/register`, `/dashboard`,
 `/profile`, `/progress`, `/exercises`, `/account/password`, `/admin/exercises`
-(+ `/new`, `/{id}/edit`) — full reference in §13.
+(+ `/new`, `/{id}/edit`), `/finance`, `/meals`, `/movies`, `/learning`,
+`/tasks` — full reference in §13.
 
 ---
 
@@ -854,7 +873,7 @@ logic anywhere to drift out of sync with the API.
 
 | Route(s) | Controller | Template | Backing form | Auth |
 |---|---|---|---|---|
-| `/` | `HomeController` | `home.html` | — | public — card grid: the live "Workout Planner" domain (its usual nav embedded in the card) plus `comingSoonDomains` placeholder cards (`DecisionDomainCard`, no routes yet) |
+| `/` | `HomeController` | `home.html` | — | public — card grid: "Workout Planner" (its usual nav embedded in the card) plus one `DecisionDomainCard` per other domain, all `isLive()` (non-null `url`) now that all five are built |
 | `/register` | `RegisterController` | `register.html` | `RegisterRequest` (shared with the API DTO) | public |
 | `/login` | `LoginController` (mostly Spring's `formLogin()`) | `login.html` | — | public |
 | `/help` | `HelpController` | `help.html` | — | public |
@@ -864,6 +883,11 @@ logic anywhere to drift out of sync with the API.
 | `/progress` | `ProgressViewController` | `progress.html` | — | session |
 | `/account/password` (GET+POST) | `AccountViewController` | `account-password.html` | `ChangePasswordRequest` (shared with the API DTO) | session |
 | `/admin/exercises`, `/admin/exercises/new`, `/admin/exercises/{id}/edit` | `AdminExerciseController` | `admin-exercises.html`, `admin-exercise-form.html` | `ExerciseForm` | session + `ROLE_ADMIN` |
+| `/finance` (GET), `/finance/recommend` (POST) | `FinanceViewController` | `finance.html` | plain `@RequestParam`s | public |
+| `/meals` (GET), `/meals/plan` (POST) | `MealPlannerViewController` | `meals.html` | plain `@RequestParam`s | public |
+| `/movies` (GET), `/movies/recommend` (POST) | `MovieViewController` | `movies.html` | plain `@RequestParam`s | public |
+| `/learning` (GET), `/learning/recommend` (POST) | `LearningViewController` | `learning.html` | plain `@RequestParam`s | public |
+| `/tasks` (GET), `/tasks/prioritize` (POST) | `TaskPrioritizerViewController` | `productivity.html` | parallel `List<...>` `@RequestParam`s (§16) | public |
 
 ### Why some pages need a dedicated form-backing bean and some don't
 
@@ -959,6 +983,88 @@ Three additions, no application code changes:
   check/readiness probe at this path.
 
 What this does **not** do: provision a database, pick a specific cloud
-provider, or seed any data beyond the normal `V1`–`V12` migrations (the
+provider, or seed any data beyond the normal `V1`–`V14` migrations (the
 `db/dev-migration` test accounts, §14, are dev-profile-only and won't exist
 in a `prod`-profile deployment).
+
+---
+
+## 16. The five basic domains
+
+Five sibling domains to fitness — `finance`, `meals`, `movies`, `learning`,
+`productivity` — each a real, working instantiation of `decisionengine`,
+built deliberately thin rather than to fitness's depth. Same core pattern
+every time: a `Context` record (`C`), a candidate record (`T`), one or two
+`Rule<C,T>` beans, one `ScoringStrategy<C,T>` bean, and a `@Service` that
+constructs a `new RuleBasedDecisionEngine<>(rules, scorer)` and calls
+`.rank(context, candidates)` — exactly the same three lines
+`RuleBasedWorkoutPlanGenerator` uses (§5.7), just without everything fitness
+wraps around them.
+
+### What's different from fitness, on purpose
+
+| Fitness has... | These five don't, because... |
+|---|---|
+| A persisted `UserProfile` | Nothing here needs to be remembered between requests — context comes straight from the request/form body each time (`FinanceContext`, `MealContext`, etc. are plain records, not `@Entity`-backed) |
+| A DB-migrated, admin-editable `exercises` catalog | No admin-editing or historical-reference need to justify a table — catalogs are a `List.of(...)` in a `@Component` (e.g. `InstrumentCatalog`), seeded once at class-load, never written to |
+| `workout_logs` + `RecentActivitySummaryBuilder` (adaptive feedback) | No history table, so no signal to adapt from — every recommendation is computed fresh from just the current request |
+| `fitness.engine.assist` (AI-ready seam) | No ambiguity resolution, explanation text, or motivational messaging exists to swap out yet — could be added the same way if these domains ever grow |
+| Separate web DTOs (`UpdateProfileRequest` → `ProfileUpdateCommand`) | REST controllers bind the domain's own `Context`/candidate records directly as request/response bodies — there's no persisted entity to keep the web layer decoupled from, so the extra indirection wouldn't buy anything (see the comment in `FinanceController`) |
+| A `rulebased`/`strategy`/`scoring` subpackage split | Small enough (2-6 classes total) to keep everything flat in one package per domain |
+
+### Per-domain notes
+
+- **`finance` (Portfolio Advisor)** — `RiskToleranceRule` ranks
+  `RiskLevel`/`RiskTolerance` via explicit `switch` expressions rather than
+  `.ordinal()`, same rationale as fitness's `ExperienceLevelRule` (§5.3):
+  two independently-declared enums shouldn't be compared by declaration
+  order. `FinanceScorer` weights `expectedReturnPercent` by risk appetite
+  (0.5x for `CONSERVATIVE` up to 3x for `AGGRESSIVE`) rather than using a
+  flat bonus.
+- **`meals` (Meal Planner)** — the closest structural echo of fitness:
+  `MealPlannerService.recommendDailyPlan()` loops `MealType.values()`
+  (breakfast/lunch/dinner/snack) building a fresh `MealContext` per slot,
+  tracking a running `usedInThisPlan` set exactly like
+  `RuleBasedWorkoutPlanGenerator.buildSession()` does for exercises, so a
+  day's plan never repeats a meal.
+- **`movies` (Movie & Show Picks)** — the simplest of the five: two rules
+  (excluded genre, fits available time), one scoring signal (preferred
+  genre). Deliberately left this plain to prove the floor of what "a domain"
+  needs to be, not just the ceiling.
+- **`learning` (Learning Path)** — `LevelRule` caps course level at the
+  user's current level **+1** (a reasonable stretch course), not an exact
+  match — allows growth without allowing a beginner to be offered an
+  advanced course. This is the one domain whose natural next step is a
+  prerequisite chain rather than a flat level cap; see the
+  `DecisionTreeStrategy` discussion in §5.1 for why that wasn't built
+  speculatively ahead of a real need.
+- **`productivity` (Daily Task Prioritizer)** — the odd one out, and
+  deliberately so: `Task` (the `T`) is supplied by the caller in the
+  request itself, not drawn from any catalog — there is no
+  `TaskCatalog` class. `TaskPrioritizerService.prioritize(context, tasks)`
+  takes the candidate list as a parameter instead of loading one. This is
+  the concrete proof that `decisionengine` generalizes to "rank the user's
+  own items," not only "pick from a fixed pool" — see the home page
+  tagline's distinction between this domain and the other four.
+  `TaskPrioritizerViewController` binds its 5-row form via parallel
+  same-named `@RequestParam List<...>`s (`taskName`, `taskUrgency`,
+  `taskImportance`, `taskMinutes`) zipped back into `Task` records in the
+  controller, rather than a mutable form-backing bean with indexed
+  `th:field` binding like `ProfileForm` uses (§13) — simpler here since the
+  rows are a fixed, flat count with no nested object graph.
+
+### A note on truthiness while building `productivity.html`
+
+Thymeleaf's `th:if` treats an **empty** `List`/`Map`/`Set` as falsy, same as
+`null` — not "present but empty." `productivity.html`'s results card
+originally used `th:if="${prioritized}"` to decide whether to show the
+"prioritized list" card at all, which meant a legitimate empty result (every
+submitted task too long for the available time) would hide the card
+**and** the "no task fit" message meant to explain that, indistinguishably
+from "you haven't submitted the form yet." Fixed by checking
+`${prioritized != null}` for the card itself, then
+`${not #lists.isEmpty(prioritized)}` / `${#lists.isEmpty(prioritized)}` to
+choose between the table and the empty-state message inside it — the same
+two-attribute pattern `progress.html` already used for personal
+records/workout history (§13), just not one I'd re-derived correctly from
+memory on the first pass here.

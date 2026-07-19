@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Meal Planner — DME</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body>
+<p><a th:href="@{/}">← Home</a></p>
+<h1>Meal Planner</h1>
+<p class="hint">Another thin domain on the same engine — one slot per meal
+    type (breakfast/lunch/dinner/snack), same "rank, pick, exclude
+    already-used" shape the Workout Planner uses for exercises.</p>
+
+<form th:action="@{/meals/plan}" method="post">
+    <div>
+        <label for="dietGoal">Diet goal</label>
+        <select id="dietGoal" name="dietGoal" required="required">
+            <option th:each="goal : ${dietGoals}" th:value="${goal}" th:text="${goal}"
+                    th:selected="${goal == selectedDietGoal}"></option>
+        </select>
+    </div>
+    <fieldset>
+        <legend>Allergies</legend>
+        <label th:each="allergen : ${allergens}">
+            <input type="checkbox" name="allergies" th:value="${allergen}"/>
+            <span th:text="${allergen}"></span>
+        </label>
+    </fieldset>
+    <button type="submit">Build a day's meal plan</button>
+</form>
+
+<div th:if="${dailyPlan}" class="card">
+    <h2>Today's plan</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Slot</th>
+            <th>Meal</th>
+            <th>Calories</th>
+            <th>Protein (g)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="meal : ${dailyPlan}">
+            <td th:text="${meal.mealType}"></td>
+            <td th:text="${meal.name}"></td>
+            <td th:text="${meal.calories}"></td>
+            <td th:text="${meal.proteinGrams}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<h2>Full catalog</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Name</th>
+        <th>Slot</th>
+        <th>Calories</th>
+        <th>Protein (g)</th>
+        <th>Allergens</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="meal : ${meals}">
+        <td th:text="${meal.name}"></td>
+        <td th:text="${meal.mealType}"></td>
+        <td th:text="${meal.calories}"></td>
+        <td th:text="${meal.proteinGrams}"></td>
+        <td th:text="${#strings.listJoin(meal.allergens, ', ')}"></td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>

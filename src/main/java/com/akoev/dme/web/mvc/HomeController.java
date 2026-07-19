@@ -10,19 +10,22 @@ import java.util.List;
 @Controller
 public class HomeController {
 
-    // Not built yet — see DecisionDomainCard. Update this list as new
-    // domains land; nothing else about the home page needs to change.
-    private static final List<DecisionDomainCard> COMING_SOON_DOMAINS = List.of(
+    // Basic (thin, no persisted profile/history) but live — each is a real
+    // Rule/ScoringStrategy instantiation of the generic engine, just much
+    // smaller in scope than fitness. Add a no-url DecisionDomainCard here
+    // for a future domain that isn't built yet; nothing else about the home
+    // page needs to change either way.
+    private static final List<DecisionDomainCard> DOMAINS = List.of(
             new DecisionDomainCard("Portfolio Advisor",
-                    "Investment picks based on risk tolerance, time horizon, and sector preferences."),
+                    "Investment picks based on risk tolerance, time horizon, and sector preferences.", "/finance"),
             new DecisionDomainCard("Meal Planner",
-                    "Meal plans based on dietary goals, allergies, and disliked ingredients."),
+                    "A day's meal plan based on your diet goal and allergies.", "/meals"),
             new DecisionDomainCard("Movie & Show Picks",
-                    "Recommendations based on genre preferences and what you've already watched."),
+                    "Recommendations based on genre preferences and available time.", "/movies"),
             new DecisionDomainCard("Learning Path",
-                    "Course/skill recommendations based on a career goal, current level, and prerequisites."),
+                    "Course picks for a skill area, capped one level above where you are today.", "/learning"),
             new DecisionDomainCard("Daily Task Prioritizer",
-                    "Ranks your own tasks by urgency, importance, and energy level — adapting from what got done vs. deferred, rather than picking from a fixed catalog like the others.")
+                    "Ranks your own tasks by urgency, importance, and energy level — the one domain here that ranks what you type in, not a fixed catalog.", "/tasks")
     );
 
     @GetMapping("/")
@@ -34,7 +37,7 @@ public class HomeController {
                     .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
             model.addAttribute("isAdmin", isAdmin);
         }
-        model.addAttribute("comingSoonDomains", COMING_SOON_DOMAINS);
+        model.addAttribute("domains", DOMAINS);
         return "home";
     }
 }
