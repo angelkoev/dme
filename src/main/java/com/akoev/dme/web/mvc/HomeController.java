@@ -20,7 +20,9 @@ public class HomeController {
             new DecisionDomainCard("Movie & Show Picks",
                     "Recommendations based on genre preferences and what you've already watched."),
             new DecisionDomainCard("Learning Path",
-                    "Course/skill recommendations based on a career goal, current level, and prerequisites.")
+                    "Course/skill recommendations based on a career goal, current level, and prerequisites."),
+            new DecisionDomainCard("Daily Task Prioritizer",
+                    "Ranks your own tasks by urgency, importance, and energy level — adapting from what got done vs. deferred, rather than picking from a fixed catalog like the others.")
     );
 
     @GetMapping("/")
