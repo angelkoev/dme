@@ -34,9 +34,9 @@
     <button type="submit">Get picks</button>
 </form>
 
-<div th:if="${recommendations}" class="card">
+<div th:if="${recommendations != null}" class="card">
     <h2>Picks for you</h2>
-    <table>
+    <table th:if="${not #lists.isEmpty(recommendations)}">
         <thead>
         <tr>
             <th>Title</th>
@@ -52,6 +52,7 @@
         </tr>
         </tbody>
     </table>
+    <p th:if="${#lists.isEmpty(recommendations)}" class="hint">Nothing fit that time budget/genre combination.</p>
 </div>
 
 <h2>Full catalog</h2>

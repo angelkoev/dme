@@ -4,6 +4,8 @@ import com.akoev.dme.meals.Allergen;
 import com.akoev.dme.meals.DietGoal;
 import com.akoev.dme.meals.Meal;
 import com.akoev.dme.meals.MealPlannerService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,10 +29,13 @@ public class MealController {
     }
 
     @PostMapping("/plan")
-    public List<Meal> plan(@RequestBody DailyPlanRequest request) {
+    public List<Meal> plan(@Valid @RequestBody DailyPlanRequest request) {
         return mealPlannerService.recommendDailyPlan(request.dietGoal(), request.allergies());
     }
 
-    public record DailyPlanRequest(DietGoal dietGoal, Set<Allergen> allergies) {
+    // dietGoal is @NotNull because MealScorer switches on it; a plain switch
+    // throws on a null enum, which without this validation surfaced as an
+    // opaque 500 instead of a 400 for a missing field.
+    public record DailyPlanRequest(@NotNull DietGoal dietGoal, Set<Allergen> allergies) {
     }
 }

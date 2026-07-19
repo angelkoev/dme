@@ -93,7 +93,7 @@ class WorkoutPlanControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.id").value(planId));
 
         String completeBody = """
-                {"completionPercentage":90,"rating":5,"perceivedIntensity":7,"notes":"Felt great"}
+                {"completionPercentage":90,"rating":5,"perceivedIntensity":5,"notes":"Felt great"}
                 """;
         mockMvc.perform(post("/api/v1/workout-plans/%d/sessions/%d/complete".formatted(planId, firstSessionId))
                         .header("Authorization", "Bearer " + token)

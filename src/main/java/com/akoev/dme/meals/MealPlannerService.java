@@ -29,11 +29,6 @@ public class MealPlannerService {
         return catalog.findAll();
     }
 
-    public List<Meal> recommendForSlot(MealContext context) {
-        RuleBasedDecisionEngine<MealContext, Meal> engine = new RuleBasedDecisionEngine<>(rules, scorer);
-        return engine.rank(context, catalog.findAll()).stream().map(ScoredCandidate::candidate).limit(3).toList();
-    }
-
     public List<Meal> recommendDailyPlan(DietGoal dietGoal, Set<Allergen> allergies) {
         RuleBasedDecisionEngine<MealContext, Meal> engine = new RuleBasedDecisionEngine<>(rules, scorer);
         Set<Long> usedInThisPlan = new HashSet<>();

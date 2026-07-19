@@ -31,9 +31,9 @@
     <button type="submit">Build a day's meal plan</button>
 </form>
 
-<div th:if="${dailyPlan}" class="card">
+<div th:if="${dailyPlan != null}" class="card">
     <h2>Today's plan</h2>
-    <table>
+    <table th:if="${not #lists.isEmpty(dailyPlan)}">
         <thead>
         <tr>
             <th>Slot</th>
@@ -51,6 +51,7 @@
         </tr>
         </tbody>
     </table>
+    <p th:if="${#lists.isEmpty(dailyPlan)}" class="hint">No meal fit every slot with those allergies.</p>
 </div>
 
 <h2>Full catalog</h2>

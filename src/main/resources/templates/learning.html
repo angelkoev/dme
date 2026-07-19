@@ -28,9 +28,9 @@
     <button type="submit">Get course picks</button>
 </form>
 
-<div th:if="${recommendations}" class="card">
+<div th:if="${recommendations != null}" class="card">
     <h2>Recommended courses</h2>
-    <table>
+    <table th:if="${not #lists.isEmpty(recommendations)}">
         <thead>
         <tr>
             <th>Name</th>
@@ -48,6 +48,7 @@
         </tr>
         </tbody>
     </table>
+    <p th:if="${#lists.isEmpty(recommendations)}" class="hint">No course matched that skill area/level.</p>
 </div>
 
 <h2>Full catalog</h2>

@@ -3,6 +3,7 @@ package com.akoev.dme.web.api;
 import com.akoev.dme.finance.FinanceAdvisorService;
 import com.akoev.dme.finance.FinanceContext;
 import com.akoev.dme.finance.Instrument;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,7 +34,7 @@ public class FinanceController {
     }
 
     @PostMapping("/recommend")
-    public List<Instrument> recommend(@RequestBody FinanceContext context) {
+    public List<Instrument> recommend(@Valid @RequestBody FinanceContext context) {
         return financeAdvisorService.recommend(context);
     }
 }

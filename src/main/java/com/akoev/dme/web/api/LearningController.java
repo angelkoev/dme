@@ -3,6 +3,7 @@ package com.akoev.dme.web.api;
 import com.akoev.dme.learning.Course;
 import com.akoev.dme.learning.LearningContext;
 import com.akoev.dme.learning.LearningPathService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,7 +26,7 @@ public class LearningController {
     }
 
     @PostMapping("/recommend")
-    public List<Course> recommend(@RequestBody LearningContext context) {
+    public List<Course> recommend(@Valid @RequestBody LearningContext context) {
         return learningPathService.recommend(context);
     }
 }

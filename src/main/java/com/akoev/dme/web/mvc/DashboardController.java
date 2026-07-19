@@ -41,19 +41,24 @@ public class DashboardController {
     public String generate(@AuthenticationPrincipal CustomUserDetails principal,
                             @RequestParam(required = false) String goalOverride,
                             RedirectAttributes redirectAttributes) {
-        // Bound as a raw String, not TrainingGoal: unlike bean-property binding
-        // (e.g. ProfileForm), @RequestParam's ConversionService has no
-        // empty-string-is-null special case, so an unset <select> (value="")
-        // would otherwise fail enum conversion instead of meaning "no override".
-        TrainingGoal goal = (goalOverride == null || goalOverride.isBlank()) ? null : TrainingGoal.valueOf(goalOverride);
         try {
+            // Bound as a raw String, not TrainingGoal: unlike bean-property binding
+            // (e.g. ProfileForm), @RequestParam's ConversionService has no
+            // empty-string-is-null special case, so an unset <select> (value="")
+            // would otherwise fail enum conversion instead of meaning "no override".
+            // valueOf() must stay inside this try: a tampered/stale non-blank value
+            // throws IllegalArgumentException, which — unlike ResponseStatusException
+            // below — has no handler in web.mvc (ApiExceptionHandler only covers
+            // web.api), so outside the try it would surface as a raw 500 page.
+            TrainingGoal goal = (goalOverride == null || goalOverride.isBlank()) ? null : TrainingGoal.valueOf(goalOverride);
             workoutPlanService.generate(principal.getId(), goal);
-        } catch (ResponseStatusException ex) {
+        } catch (ResponseStatusException | IllegalArgumentException ex) {
             // Same expected condition dashboard() already handles for the GET
             // case (e.g. "no profile yet") — without this catch it escaped as
             // an unhandled 404/plain-text error page, since ApiExceptionHandler
             // is scoped to web.api only and never sees web.mvc requests.
-            redirectAttributes.addFlashAttribute("generateError", ex.getReason());
+            String message = ex instanceof ResponseStatusException rse ? rse.getReason() : "Invalid goal selection.";
+            redirectAttributes.addFlashAttribute("generateError", message);
         }
         return "redirect:/dashboard";
     }
