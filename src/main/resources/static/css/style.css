@@ -340,3 +340,50 @@ tbody tr:hover {
     padding: 0;
     margin: 1rem 0 0;
 }
+
+/* Home page: one card per decision domain */
+.domain-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.domain-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+.domain-card h2 {
+    margin-top: 0;
+}
+
+/* The live domain's card embeds its real nav; flatten it back down since
+   it's already inside a card (avoid a card-in-a-card, boxed-nav look). */
+.domain-card nav {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+}
+
+.domain-card-disabled {
+    opacity: 0.65;
+}
+
+.badge-soon {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+}

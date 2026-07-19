@@ -3,20 +3,35 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>DME — Personalized Workouts</title>
+    <title>DME — Decision Making Engine</title>
     <link rel="stylesheet" th:href="@{/css/style.css}"/>
 </head>
 <body>
-<h1>DME</h1>
-<nav>
-    <a th:href="@{/help}">Help</a> |
-    <a th:href="@{/exercises}">Exercises</a>
-    <span th:if="${username}"> | <a th:href="@{/profile}">My Profile</a></span>
-    <span th:if="${username}"> | <a th:href="@{/dashboard}">My Dashboard</a></span>
-    <span th:if="${username}"> | <a th:href="@{/progress}">My Progress</a></span>
-    <span th:if="${username}"> | <a th:href="@{/account/password}">Change Password</a></span>
-    <span th:if="${isAdmin}"> | <a th:href="@{/admin/exercises}">Manage Exercises (Admin)</a></span>
-</nav>
+<h1>DME — Decision Making Engine</h1>
+<p>One engine, many decisions. Pick a domain to get started.</p>
+
+<div class="domain-grid">
+    <div class="domain-card">
+        <h2>Workout Planner</h2>
+        <p>Personalized workout plans based on your goals, equipment, experience, and injuries.</p>
+        <nav>
+            <a th:href="@{/help}">Help</a> |
+            <a th:href="@{/exercises}">Exercises</a>
+            <span th:if="${username}"> | <a th:href="@{/profile}">My Profile</a></span>
+            <span th:if="${username}"> | <a th:href="@{/dashboard}">My Dashboard</a></span>
+            <span th:if="${username}"> | <a th:href="@{/progress}">My Progress</a></span>
+            <span th:if="${username}"> | <a th:href="@{/account/password}">Change Password</a></span>
+            <span th:if="${isAdmin}"> | <a th:href="@{/admin/exercises}">Manage Exercises (Admin)</a></span>
+        </nav>
+    </div>
+
+    <div class="domain-card domain-card-disabled" th:each="domain : ${comingSoonDomains}">
+        <h2 th:text="${domain.name}"></h2>
+        <p th:text="${domain.description}"></p>
+        <span class="badge-soon">Coming soon</span>
+    </div>
+</div>
+
 <div th:if="${username}">
     <p>Logged in as <strong th:text="${username}"></strong>.</p>
     <form th:action="@{/logout}" method="post">

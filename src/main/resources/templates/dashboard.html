@@ -17,6 +17,13 @@
 
 <p th:if="${noPlan}" class="alert alert-info">You don't have a generated plan yet.</p>
 
+<p th:if="${generateError}" class="alert alert-error">
+    <span th:text="${generateError}"></span> —
+    <a th:href="@{/profile}">fill in your profile</a> first if you haven't yet.
+</p>
+
+<p th:if="${completeError}" class="alert alert-error" th:text="${completeError}"></p>
+
 <form th:action="@{/dashboard/generate}" method="post">
     <label for="goalOverride">Goal for this plan:</label>
     <select id="goalOverride" name="goalOverride">
