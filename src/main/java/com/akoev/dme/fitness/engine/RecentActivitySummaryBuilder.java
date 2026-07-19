@@ -15,7 +15,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Builds a {@link RecentActivitySummary} from {@code workout_logs}. Shared
@@ -53,12 +55,11 @@ public class RecentActivitySummaryBuilder {
 
         WorkoutLog mostRecent = recentLogs.get(0);
         long daysSince = ChronoUnit.DAYS.between(mostRecent.getPerformedAt(), Instant.now());
-        double averageRating = recentLogs.stream()
-                .map(WorkoutLog::getRating)
-                .filter(Objects::nonNull)
-                .mapToInt(Integer::intValue)
-                .average()
-                .orElse(0);
+        // Boxed to null (not 0.0) when nobody logged a rating/intensity: a "too
+        // easy" adaptive rule keyed off a low intensity score must not fire
+        // just because intensity was never reported at all.
+        Double averageRating = average(recentLogs, WorkoutLog::getRating);
+        Double averagePerceivedIntensity = average(recentLogs, WorkoutLog::getPerceivedIntensity);
 
         return RecentActivitySummary.builder()
                 .recentlyUsedExerciseIds(recentlyUsedExerciseIds)
@@ -66,6 +67,16 @@ public class RecentActivitySummaryBuilder {
                 .lastCompletionPercentage(mostRecent.getCompletionPercentage())
                 .daysSinceLastWorkout((int) daysSince)
                 .averageRating(averageRating)
+                .averagePerceivedIntensity(averagePerceivedIntensity)
                 .build();
+    }
+
+    private Double average(List<WorkoutLog> logs, Function<WorkoutLog, Integer> extractor) {
+        OptionalDouble average = logs.stream()
+                .map(extractor)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .average();
+        return average.isPresent() ? average.getAsDouble() : null;
     }
 }

@@ -16,6 +16,7 @@ public class WorkoutSessionMapper {
                 .id(entity.getId())
                 .sessionIndex(entity.getSessionIndex())
                 .name(entity.getName())
+                .dayOfWeek(entity.getDayOfWeek())
                 .exercises(entity.getSessionExercises().stream().map(sessionExerciseMapper::toDomain).toList())
                 .build();
     }

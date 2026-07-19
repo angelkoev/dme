@@ -12,7 +12,9 @@ import com.akoev.dme.domain.model.SessionExercise;
 import com.akoev.dme.domain.model.TrainingGoal;
 import com.akoev.dme.domain.model.User;
 import com.akoev.dme.domain.model.UserProfile;
+import com.akoev.dme.domain.model.WorkoutLog;
 import com.akoev.dme.domain.model.WorkoutPlan;
+import com.akoev.dme.domain.model.WorkoutSession;
 import com.akoev.dme.domain.repository.ExerciseRepository;
 import com.akoev.dme.domain.repository.UserRepository;
 import com.akoev.dme.domain.repository.WorkoutLogRepository;
@@ -37,9 +39,12 @@ import com.akoev.dme.fitness.engine.rulebased.strategy.StrengthGoalStrategy;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.DayOfWeek;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -129,6 +134,144 @@ class RuleBasedWorkoutPlanGeneratorTest {
 
         assertThatThrownBy(() -> generator.generate(new GenerationRequest(99L)))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void assignsSessionsToNonRestDaysInWeekOrder() {
+        UserRepository userRepository = mock(UserRepository.class);
+        ExerciseRepository exerciseRepository = mock(ExerciseRepository.class);
+        WorkoutLogRepository workoutLogRepository = mock(WorkoutLogRepository.class);
+        WorkoutSessionRepository workoutSessionRepository = mock(WorkoutSessionRepository.class);
+
+        UserProfile profile = UserProfile.builder()
+                .userId(1L)
+                .experienceLevel(ExperienceLevel.INTERMEDIATE)
+                .primaryGoal(TrainingGoal.HYPERTROPHY)
+                .daysPerWeek(3)
+                .sessionDurationMinutes(60)
+                .availableEquipment(Set.of(BODYWEIGHT))
+                .restDays(Set.of(DayOfWeek.WEDNESDAY, DayOfWeek.SATURDAY, DayOfWeek.SUNDAY))
+                .build();
+        User user = User.builder().id(1L).username("test.user").profile(profile).build();
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(exerciseRepository.findAll()).thenReturn(catalog());
+        when(workoutLogRepository.findRecentByUserId(anyLong(), any())).thenReturn(List.of());
+
+        RuleBasedWorkoutPlanGenerator generator = new RuleBasedWorkoutPlanGenerator(
+                userRepository, exerciseRepository,
+                new RecentActivitySummaryBuilder(workoutLogRepository, workoutSessionRepository),
+                goalStrategyResolver(), rules(), new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
+
+        WorkoutPlan plan = generator.generate(new GenerationRequest(1L));
+
+        // Monday, Tuesday, then Wednesday is skipped (a rest day) -> Thursday.
+        assertThat(plan.getSessions()).extracting(WorkoutSession::getDayOfWeek)
+                .containsExactly(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.THURSDAY);
+    }
+
+    @Test
+    void shorterSessionDurationTrimsExerciseSlotsButLongerDoesNot() {
+        UserRepository userRepository = mock(UserRepository.class);
+        ExerciseRepository exerciseRepository = mock(ExerciseRepository.class);
+        WorkoutLogRepository workoutLogRepository = mock(WorkoutLogRepository.class);
+        WorkoutSessionRepository workoutSessionRepository = mock(WorkoutSessionRepository.class);
+
+        when(exerciseRepository.findAll()).thenReturn(catalog());
+        when(workoutLogRepository.findRecentByUserId(anyLong(), any())).thenReturn(List.of());
+
+        RuleBasedWorkoutPlanGenerator generator = new RuleBasedWorkoutPlanGenerator(
+                userRepository, exerciseRepository,
+                new RecentActivitySummaryBuilder(workoutLogRepository, workoutSessionRepository),
+                goalStrategyResolver(), rules(), new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
+
+        // Hypertrophy's blueprint has 5 slots (4 focus + 1 core) at its
+        // authored 4 sets / 75s rest scheme -> ~460s/exercise. A 20-minute
+        // session (600s of that is warm-up/cool-down) only fits 3 (the
+        // floor), a 90-minute one fits all 5 unchanged.
+        UserProfile shortProfile = baseHypertrophyProfile(2L, 20);
+        User shortUser = User.builder().id(2L).username("short.session").profile(shortProfile).build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(shortUser));
+        WorkoutPlan shortPlan = generator.generate(new GenerationRequest(2L));
+        assertThat(shortPlan.getSessions().get(0).getExercises()).hasSize(3);
+
+        UserProfile longProfile = baseHypertrophyProfile(3L, 90);
+        User longUser = User.builder().id(3L).username("long.session").profile(longProfile).build();
+        when(userRepository.findById(3L)).thenReturn(Optional.of(longUser));
+        WorkoutPlan longPlan = generator.generate(new GenerationRequest(3L));
+        assertThat(longPlan.getSessions().get(0).getExercises()).hasSize(5);
+    }
+
+    @Test
+    void toughRecentFeedbackReducesSetsAndIncreasesRest() {
+        UserRepository userRepository = mock(UserRepository.class);
+        ExerciseRepository exerciseRepository = mock(ExerciseRepository.class);
+        WorkoutLogRepository workoutLogRepository = mock(WorkoutLogRepository.class);
+        WorkoutSessionRepository workoutSessionRepository = mock(WorkoutSessionRepository.class);
+
+        UserProfile profile = baseHypertrophyProfile(4L, 60);
+        User user = User.builder().id(4L).username("tough.week").profile(profile).build();
+        when(userRepository.findById(4L)).thenReturn(Optional.of(user));
+        when(exerciseRepository.findAll()).thenReturn(catalog());
+
+        WorkoutLog toughLog = WorkoutLog.builder()
+                .workoutSessionId(1L).userId(4L).performedAt(Instant.now().minusSeconds(3600))
+                .completionPercentage(40).perceivedIntensity(5).build();
+        when(workoutLogRepository.findRecentByUserId(anyLong(), any())).thenReturn(List.of(toughLog));
+        when(workoutSessionRepository.findById(any())).thenReturn(Optional.empty());
+
+        RuleBasedWorkoutPlanGenerator generator = new RuleBasedWorkoutPlanGenerator(
+                userRepository, exerciseRepository,
+                new RecentActivitySummaryBuilder(workoutLogRepository, workoutSessionRepository),
+                goalStrategyResolver(), rules(), new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
+
+        WorkoutPlan plan = generator.generate(new GenerationRequest(4L));
+        SessionExercise sessionExercise = plan.getSessions().get(0).getExercises().get(0);
+
+        // Hypertrophy's authored scheme is 4 sets / 75s rest.
+        assertThat(sessionExercise.getSets()).isLessThan(4);
+        assertThat(sessionExercise.getRestSeconds()).isGreaterThan(75);
+    }
+
+    @Test
+    void easyRecentFeedbackIncreasesSetsAndReducesRest() {
+        UserRepository userRepository = mock(UserRepository.class);
+        ExerciseRepository exerciseRepository = mock(ExerciseRepository.class);
+        WorkoutLogRepository workoutLogRepository = mock(WorkoutLogRepository.class);
+        WorkoutSessionRepository workoutSessionRepository = mock(WorkoutSessionRepository.class);
+
+        UserProfile profile = baseHypertrophyProfile(5L, 60);
+        User user = User.builder().id(5L).username("easy.week").profile(profile).build();
+        when(userRepository.findById(5L)).thenReturn(Optional.of(user));
+        when(exerciseRepository.findAll()).thenReturn(catalog());
+
+        WorkoutLog easyLog = WorkoutLog.builder()
+                .workoutSessionId(1L).userId(5L).performedAt(Instant.now().minusSeconds(3600))
+                .completionPercentage(95).perceivedIntensity(1).build();
+        when(workoutLogRepository.findRecentByUserId(anyLong(), any())).thenReturn(List.of(easyLog));
+        when(workoutSessionRepository.findById(any())).thenReturn(Optional.empty());
+
+        RuleBasedWorkoutPlanGenerator generator = new RuleBasedWorkoutPlanGenerator(
+                userRepository, exerciseRepository,
+                new RecentActivitySummaryBuilder(workoutLogRepository, workoutSessionRepository),
+                goalStrategyResolver(), rules(), new FitnessExerciseScorer(), new NoOpAmbiguityResolver());
+
+        WorkoutPlan plan = generator.generate(new GenerationRequest(5L));
+        SessionExercise sessionExercise = plan.getSessions().get(0).getExercises().get(0);
+
+        assertThat(sessionExercise.getSets()).isGreaterThan(4);
+        assertThat(sessionExercise.getRestSeconds()).isLessThan(75);
+    }
+
+    private UserProfile baseHypertrophyProfile(Long userId, int sessionDurationMinutes) {
+        return UserProfile.builder()
+                .userId(userId)
+                .experienceLevel(ExperienceLevel.INTERMEDIATE)
+                .primaryGoal(TrainingGoal.HYPERTROPHY)
+                .daysPerWeek(3)
+                .sessionDurationMinutes(sessionDurationMinutes)
+                .availableEquipment(Set.of(BODYWEIGHT))
+                .build();
     }
 
     private GoalStrategyResolver goalStrategyResolver() {

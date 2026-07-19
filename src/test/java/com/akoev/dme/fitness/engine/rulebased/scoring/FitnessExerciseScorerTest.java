@@ -101,6 +101,24 @@ class FitnessExerciseScorerTest {
     }
 
     @Test
+    void untrainedMuscleGroupIsRewardedOnceThereIsHistoryShowingOthersWereTrained() {
+        Exercise candidate = exercise(1L, ExerciseType.COMPOUND, MuscleGroup.BACK, DifficultyLevel.INTERMEDIATE);
+        UserProfile profile = UserProfile.builder().primaryGoal(TrainingGoal.HYPERTROPHY).build();
+
+        FitnessDecisionContext noHistory = context(profile, RecentActivitySummary.empty());
+        FitnessDecisionContext othersTrainedButNotThisOne = context(profile, RecentActivitySummary.builder()
+                .recentLoadByMuscleGroup(Map.of(MuscleGroup.CHEST, 2))
+                .build());
+
+        // Same exercise (BACK) either way, never itself trained recently in
+        // either scenario — isolates the "weak/neglected muscle group" bonus
+        // from the overtraining penalty, which only ever fires for a group
+        // that WAS trained.
+        assertThat(scorer.score(othersTrainedButNotThisOne, candidate))
+                .isGreaterThan(scorer.score(noHistory, candidate));
+    }
+
+    @Test
     void lowCompletionFavorsBeginnerDifficulty() {
         UserProfile profile = UserProfile.builder().primaryGoal(TrainingGoal.GENERAL_FITNESS).build();
         RecentActivitySummary recentActivity = RecentActivitySummary.builder().lastCompletionPercentage(40).build();

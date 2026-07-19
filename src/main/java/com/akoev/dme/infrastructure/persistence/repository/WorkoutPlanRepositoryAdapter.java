@@ -57,6 +57,7 @@ public class WorkoutPlanRepositoryAdapter implements WorkoutPlanRepository {
         sessionEntity.setWorkoutPlan(plan);
         sessionEntity.setSessionIndex(session.getSessionIndex());
         sessionEntity.setName(session.getName());
+        sessionEntity.setDayOfWeek(session.getDayOfWeek());
 
         for (SessionExercise sessionExercise : session.getExercises()) {
             sessionEntity.getSessionExercises().add(toSessionExerciseEntity(sessionExercise, sessionEntity));

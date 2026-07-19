@@ -23,6 +23,7 @@ public class RecentActivitySummary {
     private Integer lastCompletionPercentage;
     private Integer daysSinceLastWorkout;
     private Double averageRating;
+    private Double averagePerceivedIntensity;
 
     public static RecentActivitySummary empty() {
         return RecentActivitySummary.builder().build();

@@ -3,6 +3,8 @@ package com.akoev.dme.infrastructure.persistence.entity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -18,6 +20,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,6 +46,11 @@ public class WorkoutSessionEntity {
 
     @Column(nullable = false, length = 100)
     private String name;
+
+    // Nullable: plans generated before this column existed have no value here.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "day_of_week", length = 10)
+    private DayOfWeek dayOfWeek;
 
     @OneToMany(mappedBy = "workoutSession", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("orderIndex ASC")

@@ -36,7 +36,12 @@
 <div th:if="${plan}">
     <h2>Active Plan — <span th:text="${plan.goal}"></span></h2>
     <div th:each="workoutSession : ${plan.sessions}" class="card">
-        <h3 th:text="${workoutSession.name}"></h3>
+        <h3>
+            <span th:if="${workoutSession.dayOfWeek != null}" th:text="${workoutSession.dayOfWeek} + ' — '"></span>
+            <span th:text="${workoutSession.name}"></span>
+        </h3>
+        <p class="hint">Estimated duration: ~<span th:text="${workoutSession.estimatedDurationMinutes}"></span> min
+            (including warm-up/cool-down)</p>
         <table>
             <thead>
             <tr>
@@ -62,6 +67,9 @@
             </label>
             <label>Rating (1-5):
                 <input type="number" name="rating" min="1" max="5"/>
+            </label>
+            <label>How hard did it feel? (1=too easy, 5=too hard):
+                <input type="number" name="perceivedIntensity" min="1" max="5"/>
             </label>
             <button type="submit">Mark as completed</button>
         </form>

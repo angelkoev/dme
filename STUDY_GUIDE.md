@@ -30,9 +30,9 @@ exists to support exercising that engine end-to-end.
 - **Tech stack**: Java 25, Spring Boot 4.1.0 (spring-boot-starter-parent),
   Spring Data JPA / Hibernate, Spring Security 6 (JWT + form login), Spring
   MVC + Thymeleaf, Spring Boot Actuator (health endpoint only), MySQL 8.4,
-  Flyway (versioned migrations V1–V13, plus a dev-only seed migration —
-  see §3), Lombok, jjwt 0.12.6 for JWT, JUnit 5 + Mockito + Testcontainers
-  for tests. See `pom.xml`.
+  Flyway (versioned migrations V1–V14, plus a dev-only V13 seed migration in
+  its own location — see §3), Lombok, jjwt 0.12.6 for JWT, JUnit 5 + Mockito
+  + Testcontainers for tests. See `pom.xml`.
 - **Every capability exists both as a REST endpoint and as a browser page**
   backed by the same application-service method — see §13.
 
@@ -90,7 +90,7 @@ only on `domain.repository` interfaces (Dependency Inversion).
 | `infrastructure.persistence.repository` | Spring Data JPA repos (`XxxJpaRepository`) + `XxxRepositoryAdapter` implementing the domain port. |
 | `infrastructure.security` | `SecurityConfig`, `CustomUserDetails`(`Service`), `RestAuthenticationEntryPoint`/`RestAccessDeniedHandler`, and `jwt/` (`JwtAuthFilter`, `JwtService`, `JwtProperties`). |
 | `web.api` | REST controllers (`AuthController`, `AccountController`, `ProfileController`, `ExerciseController`, `WorkoutPlanController`, `ProgressController`, `CurrentUserController`) + `dto/` (request/response records). |
-| `web.mvc` | Thymeleaf controllers (`HomeController`, `HelpController`, `LoginController`, `RegisterController`, `DashboardController`, `ProfileViewController`, `AccountViewController`, `AdminExerciseController`, `ProgressViewController`, `ExerciseViewController`) + `form/` (`ProfileForm`, `ExerciseForm` — mutable form-backing beans, see §13). |
+| `web.mvc` | Thymeleaf controllers (`HomeController`, `HelpController`, `LoginController`, `RegisterController`, `DashboardController`, `ProfileViewController`, `AccountViewController`, `AdminExerciseController`, `ProgressViewController`, `ExerciseViewController`) + `DecisionDomainCard` (the home page's "coming soon" placeholder registry) + `form/` (`ProfileForm`, `ExerciseForm` — mutable form-backing beans, see §13). |
 | `web.exception` | `ApiExceptionHandler` (REST-only `@RestControllerAdvice`), `ApiError`. |
 
 ### Design patterns actually in the code (not just claimed)
@@ -109,7 +109,7 @@ only on `domain.repository` interfaces (Dependency Inversion).
 
 ## 3. Database schema
 
-MySQL 8.4, fully versioned by Flyway migrations `V1`–`V13` in
+MySQL 8.4, fully versioned by Flyway migrations `V1`–`V14` in
 `src/main/resources/db/migration/` (plus a dev-only `V13` seed migration in
 a *separate* folder, `src/main/resources/db/dev-migration/` — see below).
 Nothing is created by Hibernate (`ddl-auto: validate` in `application.yml` —
@@ -130,6 +130,7 @@ Hibernate checks the schema matches the entities but never generates DDL).
 | V11 | `personal_records`, `workout_streaks`, `user_favorite_workout_plans` |
 | V12 | Seeds 28 exercises spanning every muscle group / movement pattern / difficulty / equipment combination, plus their `exercise_equipment` rows |
 | V13 *(dev-only, `db/dev-migration/`)* | Seeds `testuser`/`testadmin` test accounts — see §14 |
+| V14 | Adds `workout_sessions.day_of_week` (nullable — plans generated before this migration have no value here) |
 
 Key modeling decisions worth remembering:
 
@@ -146,7 +147,11 @@ Key modeling decisions worth remembering:
   written.
 - **`workout_logs`** is the table that makes generation *adaptive*. Nothing
   else in the schema feeds back into exercise selection — see
-  `RecentActivitySummaryBuilder` in §6.
+  `RecentActivitySummaryBuilder` in §6. `perceived_intensity` in particular
+  sat unused for a while (captured, never read back) until it became the
+  signal for the "too easy"/"too hard" adaptive volume rule (§5.7) —
+  distinct from `rating`, which stays a satisfaction signal, not a
+  difficulty one.
 - **`session_exercises.exercise_id` has `ON DELETE RESTRICT`**, unlike almost
   everything else which cascades — you cannot delete an `Exercise` that is
   referenced by a historical plan.
@@ -308,6 +313,7 @@ skipped (`RuleBasedWorkoutPlanGenerator.buildSession`, `if (chosen == null) cont
 | Targets a `profile.preferredCategories` muscle group | +10 | `preferredCategoryScore` |
 | Exercise id in `recentActivity.recentlyUsedExerciseIds` (used in last 14 days) | −30 | `recencyPenalty` |
 | Muscle group trained recently | −12 **per recent session** that hit it | `overtrainingPenalty` |
+| Muscle group with **zero** recent sessions (only once `recentLoadByMuscleGroup` is non-empty at all — an empty map means no data, not "everything is weak") | +10 | `weakMuscleGroupBonus` |
 | `lastCompletionPercentage < 60` | +10 if `BEGINNER` difficulty, else −10 (deload) | `difficultyAdjustment` |
 | `lastCompletionPercentage > 90` | +10 if `ADVANCED` difficulty, else 0 (progressive overload) | `difficultyAdjustment` |
 | — | + random jitter in `[0, 5)` (breaks ties among otherwise-equal exercises for variety) | `ThreadLocalRandom` |
@@ -319,6 +325,16 @@ in `FitnessExerciseScorerTest`. The comment in the source calls out the
 penalty is the smallest per-unit weight and must still dominate jitter even
 after just **one** recent session.
 
+`weakMuscleGroupBonus` is the deliberate complement to `overtrainingPenalty`:
+the two signals always move in the same direction for any two muscle groups
+being compared (one has recent load and gets the penalty; the other has
+none and gets the bonus), so there's no test that isolates one from the
+other via a relative A-vs-B comparison the way the rest of this table's
+tests do — `FitnessExerciseScorerTest.untrainedMuscleGroupIsRewardedOnceThereIsHistoryShowingOthersWereTrained`
+instead compares the *same* exercise/muscle-group scored against two
+different `RecentActivitySummary`s (empty vs. "something else was trained")
+to isolate just this signal.
+
 ### 5.5 `RecentActivitySummary` — what makes generation adaptive
 
 Built per-user by `RecentActivitySummaryBuilder.build(userId)` from
@@ -329,10 +345,21 @@ Built per-user by `RecentActivitySummaryBuilder.build(userId)` from
 - `lastCompletionPercentage` — from the single most recent `WorkoutLog`.
 - `daysSinceLastWorkout` — days between now and that log's `performedAt`.
 - `averageRating` — mean of `WorkoutLog.rating` across the window (nulls filtered).
+- `averagePerceivedIntensity` — mean of `WorkoutLog.perceivedIntensity` across
+  the window (nulls filtered). Feeds the "too easy"/"too hard" adaptive
+  volume rule (§5.7), not the scorer — `rating` and `perceivedIntensity` are
+  deliberately different signals (satisfaction vs. felt difficulty).
+
+Both averages are boxed `Double`, not primitive `double` — `average()`
+defaults to `0.0` when nobody logged a value, and `0.0` would read as "very
+low intensity" to the adaptive rule below if it weren't distinguished from
+"no data." `RecentActivitySummaryBuilder.average()` returns `null` in that
+case instead (backed by `OptionalDouble.isPresent()`), so "nobody said
+anything" and "everyone said it was trivially easy" can never be confused.
 
 If there are no logs at all, `RecentActivitySummary.empty()` is used (all
 fields empty/null) — a brand-new user's first plan is unaffected by any of
-the recency/overtraining/difficulty scoring terms.
+the recency/overtraining/difficulty/weak-muscle-group/adaptive-volume terms.
 
 ### 5.6 The five `GoalWorkoutStrategy` implementations
 
@@ -365,26 +392,69 @@ strategy (a misconfiguration bug, not a user error → falls to 500, §4).
 3. Build `RecentActivitySummary` for the user (§5.5).
 4. Load the **entire** exercise catalog once (`exerciseRepository.findAll()`)
    — filtering happens in memory per slot, not via SQL `WHERE` clauses. Fine
-   at 28 seed rows; would need revisiting at catalog scale (see §9).
+   at 28 seed rows; would need revisiting at catalog scale (see §10).
 5. Construct one `RuleBasedDecisionEngine<FitnessDecisionContext, Exercise>`
    for the whole generation (rules + scorer are stateless singletons, safe
    to reuse across slots).
-6. For each `SessionBlueprint` in the goal's split, for each movement-pattern
-   slot in that blueprint:
-   - Build a fresh `FitnessDecisionContext` targeting that slot's pattern.
-   - Exclude any exercise already used **elsewhere in this same plan**
-     (`usedInThisPlan`, a running `Set<Long>`) — guarantees no repeats within
-     one generated plan.
-   - Rank the remaining catalog through the engine.
-   - `pickBest`: if the top two scores are within `TIE_SCORE_TOLERANCE = 1.0`
-     of each other, delegate to `AmbiguityResolver.resolveTie(...)` (today:
-     `NoOpAmbiguityResolver` just takes candidate #1, since the list is
-     already sorted best-first — this is the seam an AI tie-breaker would
-     plug into). Otherwise take candidate #1 directly.
-   - If ranking is empty, skip the slot.
-7. Assemble `WorkoutSession`s (with `SessionExercise`s carrying the
-   `SetRepScheme` values) into a `WorkoutPlan` with
+6. `adjustForRecentFeedback(strategy.setRepScheme(), recentActivity)` —
+   compute the plan-wide sets/rest scheme once (see below), before touching
+   any session.
+7. `nonRestDaysInWeekOrder(profile.getRestDays())` — the ordered list of
+   weekdays sessions will be assigned to (see below), also computed once.
+8. For each `SessionBlueprint` in the goal's split (index `i`):
+   - `trimToFitDuration(blueprint, setRepScheme, profile.getSessionDurationMinutes())`
+     (see below) — a *possibly* shortened blueprint for this session.
+   - `dayOfWeek = availableDays.get(i % availableDays.size())` — cycles if
+     there are more sessions than non-rest days in a week.
+   - For each movement-pattern slot in the (possibly trimmed) blueprint:
+     - Build a fresh `FitnessDecisionContext` targeting that slot's pattern.
+     - Exclude any exercise already used **elsewhere in this same plan**
+       (`usedInThisPlan`, a running `Set<Long>`) — guarantees no repeats
+       within one generated plan.
+     - Rank the remaining catalog through the engine.
+     - `pickBest`: if the top two scores are within `TIE_SCORE_TOLERANCE = 1.0`
+       of each other, delegate to `AmbiguityResolver.resolveTie(...)` (today:
+       `NoOpAmbiguityResolver` just takes candidate #1, since the list is
+       already sorted best-first — this is the seam an AI tie-breaker would
+       plug into). Otherwise take candidate #1 directly.
+     - If ranking is empty, skip the slot.
+9. Assemble `WorkoutSession`s (with `dayOfWeek` and `SessionExercise`s
+   carrying the adjusted scheme's values) into a `WorkoutPlan` with
    `generationSource = RULE_BASED`, `active = true`, `generatedAt = now`.
+
+Three private methods do the new work — all three exist specifically
+because a piece of `UserProfile`/`WorkoutLog` data was being captured and
+then silently ignored by generation:
+
+- **`nonRestDaysInWeekOrder(Set<DayOfWeek> restDays)`** — `profile.restDays`
+  used to have zero effect on anything. Walks `DayOfWeek.values()` (already
+  Monday-first in the JDK enum) filtering out rest days; if the profile
+  contradicts itself by marking every day a rest day, falls back to all
+  seven rather than returning an empty list sessions could never index
+  into. This is why `/dashboard` can show "Monday — Push Day 1" instead of
+  "Day 1" — see the template in §13.
+- **`trimToFitDuration(blueprint, setRepScheme, sessionDurationMinutes)`** —
+  `profile.sessionDurationMinutes` used to have zero effect on anything.
+  Estimates seconds-per-exercise as `sets * (restSeconds + 40)` (a flat
+  assumption, not measured), computes how many slots fit in
+  `sessionDurationMinutes * 60 - 600` (600s reserved for warm-up/cool-down),
+  floors at `MIN_EXERCISE_SLOTS = 3`, and **only ever trims**, never pads —
+  a goal strategy's blueprint is an authored movement-pattern balance (e.g.
+  Hypertrophy's 4-focus-slots-plus-1-core), and a duration preference alone
+  doesn't justify unbalancing it by adding a slot. `WorkoutSession` has its
+  own, separately-computed `getEstimatedDurationMinutes()` for display
+  (§13) — same two constants, deliberately duplicated rather than shared,
+  since a generation-time sizing decision and a post-hoc display estimate
+  are different concerns that happen to reuse the same rough math.
+- **`adjustForRecentFeedback(base, recentActivity)`** — before this, a low
+  `lastCompletionPercentage` or an extreme `averagePerceivedIntensity` only
+  ever shifted *which difficulty tier of exercise* got picked
+  (`FitnessExerciseScorer.difficultyAdjustment`, §5.4) — the actual
+  prescribed sets/rest never moved. "Too hard" (completion < 60 OR average
+  intensity ≥ 4.5) drops sets by 1 (floor `MIN_SETS = 2`) and adds 15s rest;
+  "too easy" (completion > 90 AND average intensity ≤ 2.0) adds a set and
+  removes 15s rest (floor `MIN_REST_SECONDS = 20`). Applied once per plan,
+  to every session in it — deliberately simple over per-session tuning.
 
 `WorkoutPlanService.generate()` (application layer) then, **before** saving
 the newly generated plan, calls `workoutPlanRepository.deactivateAllForUser(userId)`
@@ -495,8 +565,14 @@ the equipment checkbox list.
 ```
 POST /api/v1/workout-plans/{planId}/sessions/{sessionId}/complete
   {completionPercentage, rating, perceivedIntensity, notes, exercisePerformances[]}
+POST /dashboard/sessions/{sessionId}/complete
+  completionPercentage, rating, perceivedIntensity (planId as a hidden field)
 ```
-`WorkoutPlanService.completeSession`:
+The web form didn't have a `perceivedIntensity` field at all until the
+adaptive-volume rule (§5.7) started actually consuming it — before that it
+was silently always `null` for anyone using the dashboard instead of the
+API, which would have made "too easy"/"too hard" a REST-API-only feature by
+accident. `WorkoutPlanService.completeSession`:
 1. Verifies the plan belongs to the user and the session belongs to the plan.
 2. Saves a `WorkoutLog` row.
 3. `updateStreak`: if `lastWorkoutDate == yesterday` → increment; if
@@ -516,9 +592,15 @@ POST /api/v1/workout-plans/{planId}/sessions/{sessionId}/complete
 
 ### Adaptive feedback loop
 The next `generate()` call rebuilds `RecentActivitySummary` from the logs
-just written, so recently-used exercises/muscle groups score lower and a low
-completion percentage nudges difficulty down (or a high one nudges it up) —
-see §5.4/§5.5. This is the entire "learning" mechanism; there's no ML model.
+just written, so recently-used exercises/muscle groups score lower (and a
+neglected one scores a little higher), and a low completion % or high
+perceived intensity both nudges which difficulty tier of exercise gets
+picked *and* actually reduces prescribed sets while adding rest — the
+inverse for a high completion % with low perceived intensity — see
+§5.4/§5.5/§5.7. Rest days and session length also reshape every plan (§5.7),
+though those aren't "adaptive" in the history-driven sense — they come
+straight from the profile, not from what happened last time. This is the
+entire "learning" mechanism; there's no ML model.
 
 ### Progress
 `GET /api/v1/me/streak`, `/personal-records`, `/workout-history`
@@ -648,6 +730,29 @@ small — worth knowing before you extend anything:
   `GoalWorkoutStrategy` bean (no other change needed, per the Strategy
   pattern), but adding a movement pattern or muscle group touches the seed
   data (V12) and possibly the rule set.
+- **`trimToFitDuration`'s and `WorkoutSession.getEstimatedDurationMinutes()`'s
+  timing assumptions are flat guesses** (40s of work per set, 600s of
+  warm-up/cool-down), not measured or configurable — good enough to roughly
+  size a session, not a scheduling-grade estimate. Also only ever trims a
+  blueprint, never pads it past what the goal strategy authored (§5.7) — a
+  long session preference doesn't currently add a slot back.
+- **Injuries are modeled per-`MuscleGroup`, not per-joint**
+  (`UserLimitation.muscleGroup`) — "knee problems" or "shoulder problems"
+  don't map cleanly onto a muscle group (a joint, not a muscle), so
+  `InjuryContraindicationRule` can't actually exclude an exercise based on a
+  joint issue unless the user also names a muscle group affected by it.
+  Fixing this properly means a new `BodyArea`/joint concept plus re-tagging
+  which joints each of the 28 seed exercises stresses — flagged, not done,
+  since it touches every seed row.
+- **As of this round, `restDays`, `sessionDurationMinutes`, and
+  `perceivedIntensity` are no longer dead data** (§5.7) — they used to be
+  captured on the profile/log and never read back by generation at all.
+  Worth remembering if you're auditing for *other* fields with the same
+  problem: `WorkoutLog.notes` and `SessionExercise.notes` are exposed
+  through the REST DTOs (`WorkoutLogResponse`, `SessionExerciseResponse`)
+  but still never consumed by the generation engine, nor shown anywhere in
+  the Thymeleaf templates — a real gap, just a smaller one (free-text notes
+  aren't the kind of thing a rule engine can act on directly anyway).
 
 ---
 
@@ -703,13 +808,13 @@ logic anywhere to drift out of sync with the API.
 
 | Route(s) | Controller | Template | Backing form | Auth |
 |---|---|---|---|---|
-| `/` | `HomeController` | `home.html` | — | public |
+| `/` | `HomeController` | `home.html` | — | public — card grid: the live "Workout Planner" domain (its usual nav embedded in the card) plus `comingSoonDomains` placeholder cards (`DecisionDomainCard`, no routes yet) |
 | `/register` | `RegisterController` | `register.html` | `RegisterRequest` (shared with the API DTO) | public |
 | `/login` | `LoginController` (mostly Spring's `formLogin()`) | `login.html` | — | public |
 | `/help` | `HelpController` | `help.html` | — | public |
 | `/exercises` | `ExerciseViewController` | `exercises.html` | — | public |
 | `/profile` (GET+POST) | `ProfileViewController` | `profile.html` | `ProfileForm` | session |
-| `/dashboard` (GET), `/dashboard/generate` (POST), `/dashboard/sessions/{id}/complete` (POST) | `DashboardController` | `dashboard.html` | plain `@RequestParam`s | session |
+| `/dashboard` (GET), `/dashboard/generate` (POST), `/dashboard/sessions/{id}/complete` (POST) | `DashboardController` | `dashboard.html` | plain `@RequestParam`s | session — shows each session's day-of-week and `getEstimatedDurationMinutes()` (§5.7); the complete-session form includes `perceivedIntensity`, not just completion %/rating |
 | `/progress` | `ProgressViewController` | `progress.html` | — | session |
 | `/account/password` (GET+POST) | `AccountViewController` | `account-password.html` | `ChangePasswordRequest` (shared with the API DTO) | session |
 | `/admin/exercises`, `/admin/exercises/new`, `/admin/exercises/{id}/edit` | `AdminExerciseController` | `admin-exercises.html`, `admin-exercise-form.html` | `ExerciseForm` | session + `ROLE_ADMIN` |

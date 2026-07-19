@@ -64,10 +64,11 @@ public class DashboardController {
                             @RequestParam Long planId,
                             @RequestParam int completionPercentage,
                             @RequestParam(required = false) Integer rating,
+                            @RequestParam(required = false) Integer perceivedIntensity,
                             RedirectAttributes redirectAttributes) {
         try {
             workoutPlanService.completeSession(principal.getId(), planId, sessionId,
-                    new CompleteSessionCommand(completionPercentage, rating, null, null, List.of()));
+                    new CompleteSessionCommand(completionPercentage, rating, perceivedIntensity, null, List.of()));
         } catch (ResponseStatusException ex) {
             // Separate flash attribute from generate()'s: these errors (plan/session
             // ownership) don't warrant the "fill in your profile" hint that message shows.

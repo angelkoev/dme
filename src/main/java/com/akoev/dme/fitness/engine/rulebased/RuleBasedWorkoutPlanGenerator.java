@@ -28,11 +28,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The rule-based implementation of {@link WorkoutPlanGenerator} (Template
@@ -46,6 +49,26 @@ import java.util.Set;
 public class RuleBasedWorkoutPlanGenerator implements WorkoutPlanGenerator {
 
     private static final double TIE_SCORE_TOLERANCE = 1.0;
+
+    // Duration-based slot trimming (see trimToFitDuration): rough assumptions,
+    // not measurements — mirrored (not shared) in WorkoutSession's own
+    // duration estimate, which serves a different purpose (display) and
+    // shouldn't couple to this class's algorithm.
+    private static final int ASSUMED_WORK_SECONDS_PER_SET = 40;
+    private static final int WARMUP_COOLDOWN_SECONDS = 600;
+    private static final int MIN_EXERCISE_SLOTS = 3;
+
+    // Adaptive volume (see adjustForRecentFeedback): perceivedIntensity (how
+    // hard a session FELT) drives this, not the satisfaction-oriented
+    // "rating" field — a workout can be rated highly and still have felt
+    // too easy or too hard.
+    private static final int LOW_COMPLETION_THRESHOLD = 60;
+    private static final int HIGH_COMPLETION_THRESHOLD = 90;
+    private static final double HIGH_INTENSITY_THRESHOLD = 4.5;
+    private static final double LOW_INTENSITY_THRESHOLD = 2.0;
+    private static final int REST_ADJUSTMENT_SECONDS = 15;
+    private static final int MIN_SETS = 2;
+    private static final int MIN_REST_SECONDS = 20;
 
     private final UserRepository userRepository;
     private final ExerciseRepository exerciseRepository;
@@ -74,14 +97,17 @@ public class RuleBasedWorkoutPlanGenerator implements WorkoutPlanGenerator {
         RuleBasedDecisionEngine<FitnessDecisionContext, Exercise> engine = new RuleBasedDecisionEngine<>(rules, scorer);
 
         List<GoalWorkoutStrategy.SessionBlueprint> blueprints = strategy.buildSplit(profile.getDaysPerWeek());
-        GoalWorkoutStrategy.SetRepScheme setRepScheme = strategy.setRepScheme();
+        GoalWorkoutStrategy.SetRepScheme setRepScheme = adjustForRecentFeedback(strategy.setRepScheme(), recentActivity);
+        List<DayOfWeek> availableDays = nonRestDaysInWeekOrder(profile.getRestDays());
 
         List<WorkoutSession> sessions = new ArrayList<>();
         Set<Long> usedInThisPlan = new HashSet<>();
 
         for (int sessionIndex = 0; sessionIndex < blueprints.size(); sessionIndex++) {
-            GoalWorkoutStrategy.SessionBlueprint blueprint = blueprints.get(sessionIndex);
-            sessions.add(buildSession(sessionIndex + 1, blueprint, setRepScheme, profile, recentActivity,
+            GoalWorkoutStrategy.SessionBlueprint blueprint = trimToFitDuration(
+                    blueprints.get(sessionIndex), setRepScheme, profile.getSessionDurationMinutes());
+            DayOfWeek dayOfWeek = availableDays.get(sessionIndex % availableDays.size());
+            sessions.add(buildSession(sessionIndex + 1, blueprint, setRepScheme, dayOfWeek, profile, recentActivity,
                     catalog, engine, usedInThisPlan));
         }
 
@@ -96,8 +122,8 @@ public class RuleBasedWorkoutPlanGenerator implements WorkoutPlanGenerator {
     }
 
     private WorkoutSession buildSession(int sessionIndex, GoalWorkoutStrategy.SessionBlueprint blueprint,
-                                         GoalWorkoutStrategy.SetRepScheme setRepScheme, UserProfile profile,
-                                         RecentActivitySummary recentActivity, List<Exercise> catalog,
+                                         GoalWorkoutStrategy.SetRepScheme setRepScheme, DayOfWeek dayOfWeek,
+                                         UserProfile profile, RecentActivitySummary recentActivity, List<Exercise> catalog,
                                          RuleBasedDecisionEngine<FitnessDecisionContext, Exercise> engine,
                                          Set<Long> usedInThisPlan) {
         List<SessionExercise> sessionExercises = new ArrayList<>();
@@ -134,8 +160,71 @@ public class RuleBasedWorkoutPlanGenerator implements WorkoutPlanGenerator {
         return WorkoutSession.builder()
                 .sessionIndex(sessionIndex)
                 .name(blueprint.name())
+                .dayOfWeek(dayOfWeek)
                 .exercises(sessionExercises)
                 .build();
+    }
+
+    // Rest days are captured on the profile but otherwise never consulted —
+    // without this, a user's chosen rest days had zero effect on generation.
+    // Walks the week Monday-first, skipping rest days; if every day is
+    // marked rest (a contradictory profile, but not our job to reject it
+    // here), falls back to using all seven rather than looping forever or
+    // returning an empty list sessions could never index into.
+    private List<DayOfWeek> nonRestDaysInWeekOrder(Set<DayOfWeek> restDays) {
+        List<DayOfWeek> available = Arrays.stream(DayOfWeek.values())
+                .filter(day -> !restDays.contains(day))
+                .collect(Collectors.toCollection(ArrayList::new));
+        return available.isEmpty() ? List.of(DayOfWeek.values()) : available;
+    }
+
+    // sessionDurationMinutes is captured on the profile but otherwise never
+    // consulted — without this, "how long do you want to train" had zero
+    // effect on the generated plan. Only ever trims, never pads: adding a
+    // slot beyond what the goal strategy authored risks unbalancing its
+    // intended movement-pattern split (e.g. a 5th PUSH slot on a Hypertrophy
+    // push day), which a duration preference alone doesn't justify.
+    private GoalWorkoutStrategy.SessionBlueprint trimToFitDuration(
+            GoalWorkoutStrategy.SessionBlueprint blueprint, GoalWorkoutStrategy.SetRepScheme setRepScheme,
+            int sessionDurationMinutes) {
+        int secondsPerExercise = setRepScheme.sets() * (setRepScheme.restSeconds() + ASSUMED_WORK_SECONDS_PER_SET);
+        int availableSeconds = sessionDurationMinutes * 60 - WARMUP_COOLDOWN_SECONDS;
+        int targetSlots = Math.max(MIN_EXERCISE_SLOTS, availableSeconds / secondsPerExercise);
+
+        List<MovementPattern> slots = blueprint.exerciseSlots();
+        if (slots.size() <= targetSlots) {
+            return blueprint;
+        }
+        return new GoalWorkoutStrategy.SessionBlueprint(blueprint.name(), slots.subList(0, targetSlots));
+    }
+
+    // completionPercentage/perceivedIntensity are captured on every logged
+    // session but otherwise only nudge which DIFFICULTY of exercise gets
+    // picked (FitnessExerciseScorer) — the actual prescribed sets/rest never
+    // changed in response. This is the "too easy"/"too hard" adaptive rule:
+    // it adjusts the scheme once per plan, applied to every session in it.
+    private GoalWorkoutStrategy.SetRepScheme adjustForRecentFeedback(
+            GoalWorkoutStrategy.SetRepScheme base, RecentActivitySummary recentActivity) {
+        Integer completion = recentActivity.getLastCompletionPercentage();
+        Double intensity = recentActivity.getAveragePerceivedIntensity();
+
+        boolean tooHard = (completion != null && completion < LOW_COMPLETION_THRESHOLD)
+                || (intensity != null && intensity >= HIGH_INTENSITY_THRESHOLD);
+        if (tooHard) {
+            return new GoalWorkoutStrategy.SetRepScheme(
+                    Math.max(base.sets() - 1, MIN_SETS), base.repMin(), base.repMax(),
+                    base.restSeconds() + REST_ADJUSTMENT_SECONDS);
+        }
+
+        boolean tooEasy = completion != null && completion > HIGH_COMPLETION_THRESHOLD
+                && intensity != null && intensity <= LOW_INTENSITY_THRESHOLD;
+        if (tooEasy) {
+            return new GoalWorkoutStrategy.SetRepScheme(
+                    base.sets() + 1, base.repMin(), base.repMax(),
+                    Math.max(base.restSeconds() - REST_ADJUSTMENT_SECONDS, MIN_REST_SECONDS));
+        }
+
+        return base;
     }
 
     private Exercise pickBest(FitnessDecisionContext context, List<ScoredCandidate<Exercise>> ranked) {

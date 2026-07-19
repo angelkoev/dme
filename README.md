@@ -123,7 +123,8 @@ made-up types that have nothing to do with fitness).
 ## Database schema
 
 MySQL, schema fully versioned via Flyway (`src/main/resources/db/migration`,
-`V1`–`V12`). Highlights:
+`V1`–`V14`, plus a dev-only `V13` seed migration in a separate location —
+see [Test accounts](#test-accounts)). Highlights:
 
 - `users` / `roles` / `user_roles` — auth identity + RBAC.
 - `user_profiles` (1:1 with `users`, shared PK) — goal, experience level,
@@ -141,7 +142,8 @@ MySQL, schema fully versioned via Flyway (`src/main/resources/db/migration`,
 - `workout_plans` → `workout_sessions` → `session_exercises` — the
   generated plan tree. `workout_plans.generation_source` is
   `RULE_BASED`/`AI`, anticipating the future generator swap without a
-  migration.
+  migration. `workout_sessions.day_of_week` (`V14`) is nullable — plans
+  generated before that migration have no value there.
 - `workout_logs` — a completed session (completion %, rating, perceived
   intensity). This is the table that makes generation *adaptive*: it feeds
   `RecentActivitySummaryBuilder`.
@@ -188,11 +190,12 @@ for genuine server misconfiguration bugs that should surface as a plain 500.
 ### Inputs (`FitnessDecisionContext` + `RecentActivitySummary`)
 
 Goal, age/sex, experience level, available equipment, location, favorite/
-disliked exercises, preferred/unwanted categories, injuries, the movement
-pattern the current session slot targets, plus — built from `workout_logs`
-by `RecentActivitySummaryBuilder` — recently-used exercise ids, per-muscle-
-group load over the last 14 days, last completion %, days since last
-workout, average rating.
+disliked exercises, preferred/unwanted categories, injuries, rest days,
+session length, the movement pattern the current session slot targets, plus
+— built from `workout_logs` by `RecentActivitySummaryBuilder` —
+recently-used exercise ids, per-muscle-group load over the last 14 days,
+last completion %, days since last workout, average rating, and average
+perceived intensity.
 
 ### Rules (hard filters, `fitness.engine.rulebased.rules`)
 
@@ -212,6 +215,7 @@ A weighted sum, starting from a base score of 50:
 | Targets a preferred category | +10 |
 | Was used in the last 14 days | −30 (avoids repeating the same workout) |
 | Muscle group trained recently, per recent session count | −12 each (avoids overtraining) |
+| Muscle group *not* trained at all recently (only once there's history to compare against) | +10 (complements the overtraining penalty — rewards a neglected group instead of only punishing an overworked one) |
 | Last completion % < 60 | +10 for BEGINNER difficulty, −10 otherwise (deload) |
 | Last completion % > 90 | +10 for ADVANCED difficulty (progressive overload) |
 | — | + random jitter in [0, 5) for variety among near-ties |
@@ -229,7 +233,9 @@ One `GoalWorkoutStrategy` per `TrainingGoal` decides the session blueprint
 (e.g. Hypertrophy cycles Push/Pull/Legs days with 8–12 reps; Strength does
 full-body compound days with 3–6 reps and long rest; Fat Loss/Endurance run
 higher-rep circuits with short rest). `GoalStrategyResolver` picks the right
-one at runtime from all `GoalWorkoutStrategy` beans.
+one at runtime from all `GoalWorkoutStrategy` beans. The strategy's base
+sets/reps/rest scheme is then adjusted once per plan based on recent
+feedback (see below) before being applied to every session.
 
 ### Putting it together (`RuleBasedWorkoutPlanGenerator`)
 
@@ -240,6 +246,24 @@ Exercise>`, and pick the top-ranked exercise (ties broken by
 `AmbiguityResolver`). Exercises already used elsewhere in the same plan are
 excluded so a plan never repeats an exercise. If no candidate is admissible
 for a slot, that slot is skipped rather than failing the whole generation.
+
+Two profile fields that used to be captured and never used now actually
+shape the plan:
+
+- **Rest days** — sessions are assigned to real weekdays (Monday-first),
+  skipping any day the profile marks as a rest day, so `/dashboard` shows
+  "Monday — Push Day 1," not "Day 1."
+- **Session length** — each session's exercise-slot count is trimmed (never
+  padded) to roughly fit the profile's preferred session duration, based on
+  the sets/rest scheme; a 20-minute preference yields a shorter session than
+  a 90-minute one for the same goal.
+
+The scheme itself adapts to how recent sessions actually went: low
+completion % or a high average perceived intensity ("too hard") reduces
+sets and adds rest; high completion % with a low average intensity ("too
+easy") adds a set and trims rest. This is separate from — and complements —
+the difficulty-tier nudge in the scoring table above, which only affects
+*which* exercises get picked, not how much work is prescribed.
 
 ## User journey
 
@@ -276,7 +300,7 @@ Every capability above is reachable from the browser, not just the REST API:
 
 | Page | Who | What it does |
 |---|---|---|
-| `/` | anyone | Nav + login state |
+| `/` | anyone | Domain card grid — "Workout Planner" (live, with the nav below embedded in its card) plus placeholder cards for domains not built yet (`HomeController`'s `DecisionDomainCard` list) |
 | `/register`, `/login` | anyone | Session-based signup/login (separate from the JWT flow) |
 | `/profile` | any logged-in user | Full create/edit form for the profile: scalars, enums, and checkbox groups for equipment/categories/rest-days/exercises, plus a small set of indexed rows for injury limitations (`web.mvc.form.ProfileForm`) |
 | `/dashboard` | any logged-in user | Generate a plan (with an optional goal-override dropdown), view the active plan, mark a session complete |
@@ -376,7 +400,7 @@ The app has no cloud-specific code — only configuration + a container image:
   model](#security-model)), returns `{"status":"UP"}` once the datasource is
   reachable. Point your host's health check here.
 
-None of this seeds the database — Flyway still runs `V1`–`V12` against
+None of this seeds the database — Flyway still runs `V1`–`V14` against
 whatever schema `SPRING_DATASOURCE_URL` points at on first boot, same as
 local dev, just without the `db/dev-migration` test accounts (see [Test
 accounts](#test-accounts)).
@@ -395,6 +419,7 @@ accounts](#test-accounts)).
 | **v0.8+** | *Not built yet, described only:* full gamification (achievements/badges catalog, levels, weekly/monthly goals dashboard, charts), a real AI-backed implementation of the `AmbiguityResolver`/`WorkoutExplanationService`/`MotivationalMessageService` ports, and — as a demonstration that `decisionengine` is genuinely reusable — a second decision domain (e.g. nutrition) built on the same core. |
 | v1.0 | Polish: this README, expanded exception handling and validation, final test pass (M7) |
 | v1.1 | Web parity with the API: `/profile` create/edit form, dashboard goal-override, `/admin/exercises` catalog editor, `/account/password`. Fixed a bug where regenerating a plan never deactivated the previous one. Added cloud-hosting basics: `Dockerfile`, `application-prod.yml`, `/actuator/health`, and dev-only seeded test accounts. |
+| v1.2 | Multi-domain home page (`/help` plus a "coming soon" card grid — fitness is domain #1 of what's meant to be several, see [Architecture](#architecture)). Fixed the `/dashboard/generate` and session-complete actions leaking an unhandled error page on expected failures. Closed several rule-engine gaps where profile data was captured but never used: rest days now drive real weekday scheduling, session length now trims (not pads) exercise slots, and completion %/perceived intensity now adjust the actual prescribed sets/rest ("too easy"/"too hard"), not just which difficulty tier gets picked. Added a "weak muscle group" scoring bonus. |
 
 ## Future AI integration
 
